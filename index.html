@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Generic Bar &amp; Grill — Operations</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="house-top">
+  <header class="house-header">
+    <div class="house-header-inner">
+      <div class="house-brand">
+        <span class="house-mark">GB&amp;G</span>
+        <div>
+          <h1>Generic Bar &amp; Grill</h1>
+          <p class="tagline">Back-of-house operations</p>
+        </div>
+      </div>
+      <div class="house-clock" id="house-clock"></div>
+    </div>
+  </header>
+
+  <nav class="section-tabs">
+    <div class="section-tabs-inner" id="section-tabs">
+      <button class="section-btn active" data-module="dashboard">Dashboard</button>
+      <button class="section-btn" data-module="food">Food</button>
+      <button class="section-btn" data-module="bev">Beverage</button>
+      <button class="section-btn" data-module="floor">Front of House</button>
+    </div>
+  </nav>
+  </div>
+
+  <main class="app-main">
+
+    <!-- ============ HOUSE DASHBOARD ============ -->
+    <section id="mod-dashboard" class="module active"></section>
+
+    <!-- ============ FOOD ============ -->
+    <section id="mod-food" class="module mod-food">
+      <div class="module-bar">
+        <div class="module-title">
+          <span class="brand-mark">🍽️</span>
+          <div>
+            <h2>Food Cost &amp; Inventory</h2>
+            <p class="tagline">Plate costs, counts, menu engineering &amp; catering</p>
+          </div>
+        </div>
+        <nav class="tabs">
+          <button class="tab-btn active" data-tab="dashboard">Overview</button>
+          <button class="tab-btn" data-tab="ingredients">Ingredients</button>
+          <button class="tab-btn" data-tab="recipes">Recipes</button>
+          <button class="tab-btn" data-tab="inventory">Inventory</button>
+          <button class="tab-btn" data-tab="insights">Insights</button>
+          <button class="tab-btn" data-tab="usage">Usage</button>
+          <button class="tab-btn" data-tab="events">Events</button>
+        </nav>
+        <div class="header-actions">
+          <button class="btn btn-ghost danger" id="food-btn-reset">Reset Data</button>
+        </div>
+      </div>
+
+      <section id="food-panel-dashboard" class="panel active"></section>
+      <section id="food-panel-ingredients" class="panel"></section>
+      <section id="food-panel-recipes" class="panel"></section>
+      <section id="food-panel-inventory" class="panel"></section>
+      <section id="food-panel-insights" class="panel"></section>
+      <section id="food-panel-usage" class="panel"></section>
+      <section id="food-panel-events" class="panel"></section>
+    </section>
+
+    <!-- ============ BEVERAGE ============ -->
+    <section id="mod-bev" class="module mod-bev">
+      <div class="module-bar">
+        <div class="module-title">
+          <span class="brand-mark">🍸</span>
+          <div>
+            <h2>Beverage Pour Cost &amp; Inventory</h2>
+            <p class="tagline">Pour costs, house preps, bar counts &amp; events</p>
+          </div>
+        </div>
+        <nav class="tabs">
+          <button class="tab-btn active" data-tab="dashboard">Overview</button>
+          <button class="tab-btn" data-tab="ingredients">Ingredients</button>
+          <button class="tab-btn" data-tab="preps">Preps</button>
+          <button class="tab-btn" data-tab="glassware">Glassware</button>
+          <button class="tab-btn" data-tab="recipes">Recipes</button>
+          <button class="tab-btn" data-tab="inventory">Inventory</button>
+          <button class="tab-btn" data-tab="usage">Usage</button>
+          <button class="tab-btn" data-tab="events">Events</button>
+        </nav>
+        <div class="header-actions">
+          <button class="btn btn-ghost danger" id="bev-btn-reset">Reset Data</button>
+        </div>
+      </div>
+
+      <section id="bev-panel-dashboard" class="panel active"></section>
+      <section id="bev-panel-ingredients" class="panel"></section>
+      <section id="bev-panel-preps" class="panel"></section>
+      <section id="bev-panel-glassware" class="panel"></section>
+      <section id="bev-panel-recipes" class="panel"></section>
+      <section id="bev-panel-inventory" class="panel"></section>
+      <section id="bev-panel-usage" class="panel"></section>
+      <section id="bev-panel-events" class="panel"></section>
+    </section>
+
+    <!-- ============ FRONT OF HOUSE ============ -->
+    <section id="mod-floor" class="module mod-floor">
+      <div class="module-bar">
+        <div class="module-title">
+          <span class="brand-mark">🪑</span>
+          <div>
+            <h2>Host Stand</h2>
+            <p class="tagline">Floor plan &amp; waitlist</p>
+          </div>
+        </div>
+        <nav class="tabs" id="floor-tabs">
+          <button class="tab-btn active" data-tab="floor">Floor Plan</button>
+          <button class="tab-btn" data-tab="waitlist">Waitlist</button>
+        </nav>
+        <div class="header-actions">
+          <button class="btn btn-ghost" id="btn-demo">Friday Night</button>
+          <button class="btn btn-ghost danger" id="btn-clear-all">Clear All</button>
+        </div>
+      </div>
+
+      <section id="floor-panel-floor" class="panel active">
+        <div class="panel-head">
+          <div>
+            <h2>Floor Plan</h2>
+            <p class="sub" id="floor-sub">Tap a table to open it. Tap it again to cycle clean → seated → dirty. Tables stay put during service.</p>
+          </div>
+          <div class="head-controls">
+            <div class="layout-toggle" id="layout-toggle">
+              <button class="layout-btn active" data-layout="dining">Dining Room</button>
+              <button class="layout-btn" data-layout="bar">Bar</button>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="btn-arrange">Arrange Tables</button>
+            <button class="btn btn-ghost btn-sm" id="btn-reset-layout" hidden>Reset Positions</button>
+          </div>
+        </div>
+
+        <div class="floor-stats" id="floor-stats"></div>
+
+        <div class="floor-wrap">
+          <div class="floor-scroll">
+            <div class="floor" id="floor" aria-label="Floor plan"></div>
+          </div>
+          <aside class="table-panel" id="table-panel"></aside>
+        </div>
+
+        <div class="legend">
+          <span class="legend-item"><span class="swatch st-clean"></span> Clean</span>
+          <span class="legend-item"><span class="swatch st-seated"></span> Seated</span>
+          <span class="legend-item"><span class="swatch st-dirty"></span> Dirty</span>
+          <span class="legend-item muted">Positions save automatically.</span>
+        </div>
+      </section>
+
+      <section id="floor-panel-waitlist" class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Waitlist</h2>
+            <p class="sub">Quote time is stamped automatically when a party is added.</p>
+          </div>
+        </div>
+
+        <div class="wait-stats" id="wait-stats"></div>
+
+        <div class="card">
+          <h3>Add Party</h3>
+          <form id="wait-form" autocomplete="off">
+            <div class="field-row">
+              <div class="field">
+                <label for="wait-name">Name</label>
+                <input type="text" id="wait-name" placeholder="Guest name" />
+              </div>
+              <div class="field">
+                <label for="wait-phone">Phone</label>
+                <input type="tel" id="wait-phone" placeholder="(607) 555-0134" />
+              </div>
+              <div class="field field-narrow">
+                <label for="wait-party">Party Size</label>
+                <input type="number" id="wait-party" min="1" step="1" value="2" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="wait-notes">Notes</label>
+              <input type="text" id="wait-notes" placeholder="Booth if possible, high chair, celebrating…" />
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Add to Waitlist</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="wait-list"></div>
+      </section>
+    </section>
+
+  </main>
+
+  <div id="modal-overlay" class="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2 id="modal-title">Title</h2>
+        <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="js/core.js"></script>
+
+  <script src="js/food/calc.js"></script>
+  <script src="js/food/storage.js"></script>
+  <script src="js/food/app.js"></script>
+
+  <script src="js/bev/calc.js"></script>
+  <script src="js/bev/storage.js"></script>
+  <script src="js/bev/app.js"></script>
+
+  <script src="js/floor/demo.js"></script>
+  <script src="js/floor/storage.js"></script>
+  <script src="js/floor/app.js"></script>
+
+  <script src="js/shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+name: Publish to GitHub Pages
+
+# GitHub Pages serves this repo from the gh-pages branch, so publishing is a
+# matter of moving main onto that branch. The actions/deploy-pages route the
+# other apps use needs Pages' source set to "GitHub Actions", which cannot be
+# switched on from a workflow token.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Push site to gh-pages
+        run: git push origin HEAD:gh-pages
