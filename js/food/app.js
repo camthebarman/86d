@@ -1252,7 +1252,7 @@ const FoodApp = (function () {
     if (!ev) return;
     const t = eventTotals(ev);
     const lines = [];
-    lines.push(`NONE LEFT ON THE PLATE — EVENT PLAN`);
+    lines.push(`GENERIC BAR & GRILL — EVENT PLAN`);
     lines.push(`${ev.name}${ev.date ? " — " + ev.date : ""}`);
     lines.push(`${t.guests} guests · ${FoodCalc.fmtNum(t.portions, 0)} portions · total cost ${FoodCalc.fmtMoney(t.totalCost)} · revenue ${FoodCalc.fmtMoney(t.revenue)} · profit ${FoodCalc.fmtMoney(t.profit)}`);
     if (ev.notes) lines.push(`Notes: ${ev.notes}`);
