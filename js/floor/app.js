@@ -719,5 +719,34 @@ const FloorApp = (function () {
     };
   }
 
-  return { init, summary, switchTab, fmtMinutes, get state() { return state; } };
+  // A plain-data view of the room as it stands, for the Ask tab.
+  function snapshot() {
+    const now = Date.now();
+    const layouts = FloorStorage.LAYOUTS.map((l) => ({
+      layout: l.label,
+      tables: (state.layouts[l.id] || []).map((t) => ({
+        table: t.label,
+        seats: t.seats,
+        status: FloorStorage.STATUS_LABELS[t.status] || t.status,
+        guests: Number(t.guests) || 0,
+        seatedFor: t.seatedAt ? fmtMinutes(now - t.seatedAt) : null,
+        lastTurn: t.lastTurnMs ? fmtMinutes(t.lastTurnMs) : null,
+        notes: t.notes || null,
+      })),
+    }));
+    return {
+      activeLayout: layoutLabel(state.activeLayout),
+      layouts,
+      waitlist: state.waitlist.map((w, i) => ({
+        position: i + 1,
+        name: w.name,
+        party: w.party,
+        waiting: fmtMinutes(now - w.addedAt),
+        addedAt: fmtTimeOfDay(w.addedAt),
+        notes: w.notes || null,
+      })),
+    };
+  }
+
+  return { init, summary, snapshot, switchTab, fmtMinutes, get state() { return state; } };
 })();

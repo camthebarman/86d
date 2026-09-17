@@ -12,6 +12,7 @@ Four sections across the top:
 | **Food** | Ingredient costing, recipes and plate costs, the kitchen count sheet, menu engineering, usage projections and catering events. |
 | **Beverage** | Ingredient costing, house-made preps, glassware, drink recipes and pour costs, the bar count sheet, usage projections and events. |
 | **Front of House** | The host stand: a draggable floor plan for the dining room and the bar, table timers, and the waitlist. |
+| **Ask** | A question box over everything above — what's below par, what's 86'd, what a dish earns, who's waiting. |
 
 ## The dashboard
 
@@ -72,6 +73,46 @@ a different request — without restarting its quote clock.
 **Friday Night** reloads a busy service worth of demo data. **Clear All** ends
 the shift: empty waitlist, every table clean, notes wiped, positions kept.
 
+## Ask
+
+One input box, two answer sources.
+
+**The built-in engine** needs no key, no network and no account. It matches the
+question against the things a manager actually asks on shift, then computes the
+answer from the same live data the tabs are showing — so its numbers are the
+numbers on screen, and it cannot invent one. It handles: what's below par and
+needs ordering, what's 86'd, how many of something you can still make or pour,
+what a dish or drink costs and earns, what's in a recipe, best and worst
+sellers by profit or popularity, what inventory is worth, the state of the
+room, and the waitlist. Ask it something outside that and it says so rather
+than guessing.
+
+**Claude** picks up everything else — open-ended questions the engine has no
+rule for ("what should I cut from the menu", "write the staff a note about
+tonight"). It is off until someone connects a key under **Connect Claude**, and
+the engine still answers first on anything it recognises, so a connected key
+costs nothing on the common questions.
+
+### About the API key
+
+This site is static files on GitHub Pages. There is no server to keep a secret
+in, so a connected key is stored in that browser's `localStorage` and sent
+directly from the page to `api.anthropic.com` — the path Anthropic gates behind
+an explicit `anthropic-dangerous-direct-browser-access` header. Anyone who can
+use that browser profile, or run script on this origin, can read the key.
+
+That is a reasonable trade for a back-of-house tool on the manager's own
+device, and a bad one for a page the public can reach. Use a key you are
+willing to rotate, put it only on the devices your managers use, and remove it
+from the same dialog when a device changes hands. If you would rather no key
+existed anywhere, the built-in engine alone is a complete, useful tab.
+
+Answers use `claude-opus-5`, streamed so they appear as they are written. Each
+question sends a snapshot of the current food, beverage and floor data along
+with it; nothing is stored anywhere but the browser, and the transcript is
+deliberately not persisted — yesterday's answers about yesterday's counts would
+only mislead.
+
 ## Data
 
 Each tool keeps its own key, so resetting one never touches another:
@@ -100,6 +141,7 @@ js/shell.js         section switching and the combined dashboard
 js/food/            calc.js (pure math) · storage.js (state + seed) · app.js (render)
 js/bev/             same three
 js/floor/           demo.js (Friday night) · storage.js · app.js
+js/agent/           engine.js (offline answers) · claude.js (API) · app.js (chat)
 ```
 
 Each tool's `app.js` scopes every DOM lookup to its own `#mod-*` subtree, so

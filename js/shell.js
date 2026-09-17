@@ -7,7 +7,7 @@
 
 (function () {
   const el = Core.el;
-  const MODULES = ["dashboard", "food", "bev", "floor"];
+  const MODULES = ["dashboard", "food", "bev", "floor", "agent"];
 
   // ---------- section switching ----------
   function showModule(name) {
@@ -19,6 +19,7 @@
       b.classList.toggle("active", b.dataset.module === name);
     });
     if (name === "dashboard") renderDashboard();
+    if (name === "agent") AgentApp.focusInput();
     window.scrollTo({ top: 0 });
   }
 
@@ -224,6 +225,7 @@
     FoodApp.init();
     BevApp.init();
     FloorApp.init();
+    AgentApp.init();
 
     renderClock();
     setInterval(renderClock, 30000);

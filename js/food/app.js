@@ -1956,5 +1956,55 @@ const FoodApp = (function () {
     };
   }
 
-  return { init, summary, switchTab };
+  // A plain-data view of the whole food program, for the Ask tab. Everything
+  // is pre-computed and pre-labelled so a reader (human or model) never has to
+  // redo unit conversions or cost math to answer a question.
+  function snapshot() {
+    return {
+      ingredients: sortedIngredients().map((ing) => ({
+        name: ing.name,
+        category: ing.category,
+        purchase: `${FoodCalc.fmtQty(ing.purchaseQty)} ${FoodCalc.purchaseUnit(ing.baseUnit, ing.purchaseUnit).label} for ${FoodCalc.fmtMoney(ing.purchaseCost)}`,
+        yieldPct: Number(ing.yieldPct) || 100,
+        costPerUsableUnit: round2(FoodCalc.costPerUsableUnit(ing)),
+        unit: FoodCalc.unitLabel(ing, 1),
+        onHand: FoodCalc.fmtBaseQty(ing, ing.onHandQty),
+        par: FoodCalc.fmtBaseQty(ing, ing.parQty),
+        belowPar: FoodCalc.belowPar(ing),
+        onHandValue: round2(FoodCalc.inventoryValue(ing)),
+      })),
+      dishes: state.recipes.map((r) => {
+        const cost = FoodCalc.recipeCost(r, getIngredient);
+        const avail = FoodCalc.maxPortions(r, getIngredient);
+        return {
+          name: r.name,
+          menu: r.menu,
+          plateCost: round2(cost),
+          menuPrice: Number(r.menuPrice) || 0,
+          foodCostPct: r.menuPrice ? round2(FoodCalc.foodCostPct(cost, r.menuPrice)) : null,
+          profitPerServing: r.menuPrice ? round2(Number(r.menuPrice) - cost) : null,
+          servingsPerWeek: Number(r.servingsPerWeek) || 0,
+          servingsAvailableNow: avail.portions,
+          firstToRunOut: avail.limitedBy ? avail.limitedBy.name : null,
+          buildsFrom: (r.components || [])
+            .map((c) => {
+              const ing = getIngredient(c.ingredientId);
+              return ing ? `${ing.name} ${FoodCalc.fmtBaseQty(ing, FoodCalc.componentQtyPerPortion(r, c))}` : null;
+            })
+            .filter(Boolean),
+        };
+      }),
+      events: state.events.map((e) => ({
+        name: e.name,
+        date: e.date || null,
+        guests: Number(e.guestCount) || 0,
+        dishes: (e.lines || []).length,
+      })),
+      targets: { defaultFoodCostPct: state.settings.defaultTargetFoodCostPct },
+    };
+  }
+
+  function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+  return { init, summary, snapshot, switchTab };
 })();

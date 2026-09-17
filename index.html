@@ -27,6 +27,7 @@
       <button class="section-btn" data-module="food">Food</button>
       <button class="section-btn" data-module="bev">Beverage</button>
       <button class="section-btn" data-module="floor">Front of House</button>
+      <button class="section-btn" data-module="agent">Ask</button>
     </div>
   </nav>
   </div>
@@ -198,6 +199,30 @@
       </section>
     </section>
 
+
+    <!-- ============ ASK ============ -->
+    <section id="mod-agent" class="module mod-agent">
+      <div class="module-bar">
+        <div class="module-title">
+          <span class="brand-mark">💬</span>
+          <div>
+            <h2>Ask</h2>
+            <p class="tagline" id="agent-mode">Built-in answers. Connect Claude for open-ended questions.</p>
+          </div>
+        </div>
+        <div class="header-actions" style="margin-left:auto">
+          <button class="btn btn-ghost" id="agent-connect">Connect Claude</button>
+          <button class="btn btn-ghost" id="agent-clear">Clear</button>
+        </div>
+      </div>
+
+      <div class="chat-log" id="agent-log"></div>
+
+      <form class="chat-composer" id="agent-form" autocomplete="off">
+        <input type="text" id="agent-input" placeholder="What do I need to order? What's 86'd? How's the night going?" aria-label="Ask a question" />
+        <button type="submit" class="btn btn-primary" id="agent-send">Ask</button>
+      </form>
+    </section>
   </main>
 
   <div id="modal-overlay" class="modal-overlay" hidden>
@@ -225,6 +250,10 @@
   <script src="js/floor/demo.js"></script>
   <script src="js/floor/storage.js"></script>
   <script src="js/floor/app.js"></script>
+
+  <script src="js/agent/engine.js"></script>
+  <script src="js/agent/claude.js"></script>
+  <script src="js/agent/app.js"></script>
 
   <script src="js/shell.js"></script>
 </body>

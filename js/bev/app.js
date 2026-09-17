@@ -1484,5 +1484,70 @@ const BevApp = (function () {
     };
   }
 
-  return { init, summary, switchTab };
+  // A plain-data view of the whole beverage program, for the Ask tab. Same idea
+  // as the food tool's: every number is already converted and costed, so a
+  // reader never has to redo the math to answer a question.
+  function snapshot() {
+    return {
+      ingredients: sortedIngredients().map((ing) => ({
+        name: ing.name,
+        category: ing.category,
+        purchase: `${BevCalc.fmtQty(ing.purchaseQty)} ${BevCalc.purchaseUnit(ing.baseUnit, ing.purchaseUnit).label} for ${BevCalc.fmtMoney(ing.purchaseCost)}`,
+        costPerUnit: round4(BevCalc.costPerBaseUnit(ing)),
+        unit: BevCalc.unitLabel(ing, 1),
+        onHand: BevCalc.fmtBaseQty(ing, ing.onHandQty),
+        par: BevCalc.fmtBaseQty(ing, ing.parQty),
+        belowPar: BevCalc.belowPar(ing),
+        onHandValue: round2(itemValue(ing)),
+      })),
+      preps: state.preps.map((p) => ({
+        name: p.name,
+        category: p.category,
+        batchYield: `${BevCalc.fmtQty(p.yieldQty)} ${BevCalc.BASE_UNITS[p.baseUnit].label}`,
+        batchCost: round2(BevCalc.prepBatchCost(p, getIngredient)),
+        onHand: `${BevCalc.fmtQty(p.onHandQty)} ${BevCalc.BASE_UNITS[p.baseUnit].label}`,
+        par: `${BevCalc.fmtQty(p.parQty)} ${BevCalc.BASE_UNITS[p.baseUnit].label}`,
+        belowPar: BevCalc.belowPar(p),
+        builtFrom: (p.components || [])
+          .map((c) => {
+            const ing = getIngredient(c.ingredientId);
+            return ing ? `${ing.name} ${BevCalc.fmtQty(c.qty)} ${BevCalc.unitLabel(ing, c.qty)}` : null;
+          })
+          .filter(Boolean),
+      })),
+      drinks: state.recipes.map((r) => {
+        const cost = BevCalc.recipeCost(r, resolveComponent);
+        const avail = BevCalc.maxServings(r, getIngredient, getPrep);
+        const glass = getGlass(r.glassId);
+        return {
+          name: r.name,
+          category: r.category,
+          glass: glass ? glass.name : null,
+          pourCost: round2(cost),
+          menuPrice: Number(r.menuPrice) || 0,
+          pourCostPct: r.menuPrice ? round2(BevCalc.pourCostPct(cost, r.menuPrice)) : null,
+          profitPerDrink: r.menuPrice ? round2(Number(r.menuPrice) - cost) : null,
+          servingsPerNight: Number(r.servingsPerNight) || 0,
+          servingsAvailableNow: avail.servings,
+          firstToRunOut: avail.limitedBy ? avail.limitedBy.name : null,
+          buildsFrom: (r.components || [])
+            .map((c) => {
+              const src = resolveComponent(c.ingredientId);
+              return src ? `${src.name} ${BevCalc.fmtQty(c.qty)} ${BevCalc.unitLabel(src, c.qty)}` : null;
+            })
+            .filter(Boolean),
+        };
+      }),
+      glassware: state.glassSizes.map((g) => ({ name: g.name, volumeOz: g.volumeOz, defaultIceOz: g.defaultIceOz })),
+      settings: {
+        defaultPourCostPct: state.settings.defaultTargetPourCostPct,
+        operatingNightsPerWeek: state.settings.operatingNightsPerWeek,
+      },
+    };
+  }
+
+  function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+  function round4(n) { return Math.round((Number(n) || 0) * 10000) / 10000; }
+
+  return { init, summary, snapshot, switchTab };
 })();
