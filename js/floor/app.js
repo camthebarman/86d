@@ -433,6 +433,61 @@ const FloorApp = (function () {
     });
   }
 
+  // A party's details change while they wait — two more showed up, they left a
+  // better number, they'd rather have a booth. Editing never touches addedAt,
+  // so the quote clock keeps running from when they actually walked in.
+  function openWaitEditor(entry) {
+    openModal("Edit party", (body, close) => {
+      const draft = {
+        name: entry.name,
+        phone: entry.phone || "",
+        party: entry.party,
+        notes: entry.notes || "",
+      };
+
+      const nameInput = el("input", { type: "text", value: draft.name, oninput: (e) => (draft.name = e.target.value) });
+      const phoneInput = el("input", { type: "tel", value: draft.phone, oninput: (e) => (draft.phone = e.target.value) });
+      const partyInput = el("input", { type: "number", min: "1", step: "1", value: String(draft.party), oninput: (e) => (draft.party = e.target.value) });
+      const notesInput = el("input", { type: "text", value: draft.notes, oninput: (e) => (draft.notes = e.target.value) });
+
+      const form = el("form", {}, [
+        el("div", { class: "tp-party" }, [
+          el("div", {}, [`Added ${fmtTimeOfDay(entry.addedAt)}`]),
+          el("div", { class: "muted" }, [`Waiting ${fmtMinutes(Date.now() - entry.addedAt)} — editing doesn't restart the clock.`]),
+        ]),
+        // Same three-across layout as the Add Party form, so the host isn't
+        // hunting for a field they just used.
+        el("div", { class: "field-row" }, [
+          el("div", { class: "field" }, [el("label", {}, ["Name"]), nameInput]),
+          el("div", { class: "field" }, [el("label", {}, ["Phone"]), phoneInput]),
+          el("div", { class: "field field-narrow" }, [el("label", {}, ["Party Size"]), partyInput]),
+        ]),
+        el("div", { class: "field" }, [el("label", {}, ["Notes"]), notesInput]),
+        el("div", { class: "form-actions" }, [
+          el("button", { type: "button", class: "btn btn-ghost", onclick: close }, ["Cancel"]),
+          el("button", { type: "submit", class: "btn btn-primary" }, ["Save Changes"]),
+        ]),
+      ]);
+
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const name = draft.name.trim();
+        if (!name) { toast("Name is required"); nameInput.focus(); return; }
+        entry.name = name;
+        entry.phone = draft.phone.trim();
+        entry.party = Math.max(1, parseInt(draft.party, 10) || 1);
+        entry.notes = draft.notes.trim();
+        persist();
+        renderWaitlist();
+        close();
+        toast(`${entry.name} updated`);
+      });
+
+      body.appendChild(form);
+      nameInput.focus();
+    });
+  }
+
   function waitNode(entry) {
     const waited = Date.now() - entry.addedAt;
     const tone = waitClass(waited);
@@ -456,6 +511,10 @@ const FloorApp = (function () {
           class: "btn btn-primary btn-sm",
           onclick: () => promptSeat(entry),
         }, ["Seat"]),
+        el("button", {
+          class: "btn btn-sm",
+          onclick: () => openWaitEditor(entry),
+        }, ["Edit"]),
         el("button", {
           class: "btn btn-ghost btn-sm danger",
           onclick: () => { removeWaitEntry(entry.id); toast(`Removed ${entry.name}`); },

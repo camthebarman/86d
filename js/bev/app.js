@@ -1013,16 +1013,16 @@ const BevApp = (function () {
       table.append(tbody);
       availCard.append(el("div", { class: "table-wrap" }, [table]));
     }
-    panel.append(availCard);
 
-    // The count sheet itself.
+    // The count sheets go first: they're the thing you're here to change, and a
+    // count is easier to take at the top of the page than below a long read-out.
     const countCard = el("div", { class: "card" }, [
       el("h3", {}, ["Count Sheet"]),
       el("div", { class: "sub", style: "margin-bottom:10px" }, ["Count in whatever unit you count in — bottles, liters, pounds, each. Everything else converts automatically."]),
     ]);
     if (!state.ingredients.length) {
       countCard.append(el("div", { class: "empty-state" }, ["Add ingredients to start counting."]));
-      panel.append(countCard);
+      panel.append(countCard, availCard);
       return;
     }
     countCard.append(el("div", { class: "table-wrap" }, [countTable(sortedIngredients(), false)]));
@@ -1036,6 +1036,8 @@ const BevApp = (function () {
       prepCard.append(el("div", { class: "table-wrap" }, [countTable(state.preps.slice().sort((a, b) => a.name.localeCompare(b.name)), true)]));
       panel.append(prepCard);
     }
+
+    panel.append(availCard);
   }
 
   function sortedIngredients() {

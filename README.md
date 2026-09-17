@@ -29,8 +29,8 @@ can change how it stores anything without breaking the front page.
 - **Ingredients** — what you pay, how you buy it, and how much survives
   trimming. Everything prices down to a cost per *usable* unit.
 - **Recipes** — batch yields, plate costs, target food cost %, suggested price.
-- **Inventory** — count sheet in whatever unit you count in, par levels, and
-  how many servings of each dish the shelf can still produce.
+- **Inventory** — the count sheet first, in whatever unit you count in, with
+  par levels; below it, how many servings of each dish the shelf can produce.
 - **Insights** — popularity, menu engineering quadrants, cross-utilization,
   orphan ingredients and workhorse ingredients.
 - **Usage** — weekly / monthly / annual cost, revenue and profit projections.
@@ -46,8 +46,8 @@ Same shape, in a bar's units.
   the raw ingredients in the batch.
 - **Glassware** — glass volumes with default ice and straw.
 - **Recipes** — build, glass, pour cost %, target and suggested price.
-- **Inventory** — the bar count sheet, counted in bottles, liters, pounds or
-  each, plus batches of house-made prep on hand.
+- **Inventory** — the bar count sheet first, counted in bottles, liters, pounds
+  or each, then batches of house-made prep on hand, then what can be poured.
 - **Usage / Events** — nightly and program-wide projections, and one-off events.
 
 ### How "Drinks Available Now" reads a prep
@@ -65,7 +65,9 @@ timers run while a table is seated and the last turn time is kept when it
 flips. **Arrange Tables** unlocks dragging so the plan can be made to match the
 real room — positions save as you go and survive a shift reset. The waitlist
 stamps a quote time when a party is added and colours the wait as it runs long;
-seating a party from the waitlist picks a table that actually fits it.
+seating a party from the waitlist picks a table that actually fits it. A party
+already on the list can be edited — two more showed up, a better phone number,
+a different request — without restarting its quote clock.
 
 **Friday Night** reloads a busy service worth of demo data. **Clear All** ends
 the shift: empty waitlist, every table clean, notes wiped, positions kept.

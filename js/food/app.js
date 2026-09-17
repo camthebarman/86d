@@ -667,16 +667,16 @@ const FoodApp = (function () {
       table.append(tbody);
       availCard.append(el("div", { class: "table-wrap" }, [table]));
     }
-    panel.append(availCard);
 
-    // The count sheet itself.
+    // The count sheet goes first: it's the thing you're here to change, and a
+    // count is easier to take at the top of the page than below a long read-out.
     const countCard = el("div", { class: "card" }, [
       el("h3", {}, ["Count Sheet"]),
       el("div", { class: "sub", style: "margin-bottom:10px" }, ["Type counts in whatever unit you count in — cases, pounds, each. Everything else converts automatically."]),
     ]);
     if (!state.ingredients.length) {
       countCard.append(el("div", { class: "empty-state" }, ["Add ingredients to start counting."]));
-      panel.append(countCard);
+      panel.append(countCard, availCard);
       return;
     }
 
@@ -744,7 +744,7 @@ const FoodApp = (function () {
     });
     table.append(tbody);
     countCard.append(el("div", { class: "table-wrap" }, [table]));
-    panel.append(countCard);
+    panel.append(countCard, availCard);
   }
 
   function fillToPar(id) {
