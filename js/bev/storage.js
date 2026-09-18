@@ -1,4 +1,5 @@
-/* bev/storage.js — state shape, localStorage persistence, versioned seed data.
+/* bev/storage.js — state shape, persistence via platform/storage, and
+   versioned seed data.
    Seed items use fixed ids and a `sinceVersion` tag so that when new
    ingredients/recipes/glasses/preps are added later, anyone with existing
    saved data automatically gets the new ones merged in (without touching
@@ -7,7 +8,7 @@
    overwrites a price the user hasn't customized away from our default. */
 
 const BevStorage = (function () {
-  const KEY = "gbg.bev.v1";
+  const COLLECTION = "bev";
   const SEED_VERSION = 5;
 
 
@@ -496,22 +497,20 @@ const BevStorage = (function () {
     return state;
   }
 
+  // Reads the hydrated cache rather than the device directly.
   function load() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return defaultState();
-      const parsed = JSON.parse(raw);
-      if (!parsed || !parsed.ingredients || !parsed.glassSizes || !parsed.recipes) return defaultState();
-      migrateSchema(parsed);
-      return applySeedUpdates(parsed);
-    } catch (e) {
-      console.warn("Failed to load saved data, using defaults.", e);
-      return defaultState();
-    }
+    const saved = Store.get(COLLECTION, undefined);
+    if (!isValid(saved)) return defaultState();
+    migrateSchema(saved);
+    return applySeedUpdates(saved);
+  }
+
+  function isValid(parsed) {
+    return !!(parsed && parsed.ingredients && parsed.glassSizes && parsed.recipes);
   }
 
   function save(state) {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    return Store.set(COLLECTION, state);
   }
 
   function resetToDefaults() {
@@ -520,5 +519,5 @@ const BevStorage = (function () {
     return state;
   }
 
-  return { load, save, resetToDefaults, defaultState, KEY };
+  return { load, save, resetToDefaults, defaultState, COLLECTION };
 })();

@@ -235,6 +235,17 @@
 
   <div id="toast" class="toast" hidden></div>
 
+  <!-- platform: organization, storage, ids, time, errors, audit, csv, export.
+       Loaded first because every module depends on them. -->
+  <script src="js/platform/errors.js"></script>
+  <script src="js/platform/ids.js"></script>
+  <script src="js/platform/time.js"></script>
+  <script src="js/platform/org.js"></script>
+  <script src="js/platform/storage.js"></script>
+  <script src="js/platform/audit.js"></script>
+  <script src="js/platform/csv.js"></script>
+  <script src="js/platform/portability.js"></script>
+
   <script src="js/core.js"></script>
 
   <script src="js/food/calc.js"></script>
@@ -245,12 +256,15 @@
   <script src="js/bev/storage.js"></script>
   <script src="js/bev/app.js"></script>
 
+  <script src="js/floor/geometry.js"></script>
   <script src="js/floor/demo.js"></script>
   <script src="js/floor/storage.js"></script>
   <script src="js/floor/app.js"></script>
 
   <script src="js/agent/engine.js"></script>
-  <script src="js/agent/claude.js"></script>
+  <script src="js/agent/context.js"></script>
+  <script src="js/agent/service.js"></script>
+  <script src="js/agent/provider-browser.js"></script>
   <script src="js/agent/app.js"></script>
 
   <script src="js/shell.js"></script>

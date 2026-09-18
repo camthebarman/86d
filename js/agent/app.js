@@ -111,7 +111,7 @@ const AgentApp = (function () {
       return;
     }
 
-    if (!AgentClaude.isConnected()) {
+    if (!AgentService.isReady()) {
       turns.push({
         role: "assistant",
         text:
@@ -131,16 +131,19 @@ const AgentApp = (function () {
     const history = priorClaudeExchanges();
 
     try {
-      await AgentClaude.ask(q, history, (chunk) => {
-        pending.pending = false;
-        pending.text += chunk;
-        renderTranscript();
+      await AgentService.ask(q, {
+        history,
+        onDelta: (chunk) => {
+          pending.pending = false;
+          pending.text += chunk;
+          renderTranscript();
+        },
       });
       pending.pending = false;
     } catch (err) {
       pending.pending = false;
       pending.error = true;
-      pending.text = err.message;
+      pending.text = AppErrors.message(err);
     } finally {
       busy = false;
       setBusy(false);
@@ -179,7 +182,7 @@ const AgentApp = (function () {
   // ---------- connection settings ----------
   function openConnection() {
     Core.openModal("Connect Claude", (body, close) => {
-      const connected = AgentClaude.isConnected();
+      const connected = AgentService.isReady();
       const input = el("input", {
         type: "password",
         placeholder: "sk-ant-…",
@@ -203,14 +206,14 @@ const AgentApp = (function () {
               : "Get one from the Anthropic Console. It never leaves this browser except in the request to Anthropic.",
           ]),
         ]),
-        el("p", { class: "hint" }, [`Answers use ${AgentClaude.MODEL}. Each question costs whatever that model costs on your account.`]),
+        el("p", { class: "hint" }, [`Answers use ${AgentService.describe().model}. Each question costs whatever that model costs on your account.`]),
         el("div", { class: "form-actions" }, [
           connected
             ? el("button", {
                 type: "button",
                 class: "btn btn-ghost danger",
                 onclick: () => {
-                  AgentClaude.setKey("");
+                  BrowserClaudeProvider.setKey("");
                   close();
                   syncConnectionButton();
                   toast("Key removed from this device.");
@@ -226,7 +229,7 @@ const AgentApp = (function () {
         e.preventDefault();
         const val = input.value.trim();
         if (!val) { close(); return; }
-        if (!AgentClaude.setKey(val)) {
+        if (!BrowserClaudeProvider.setKey(val)) {
           toast("This browser wouldn't store the key.");
           return;
         }
@@ -241,7 +244,7 @@ const AgentApp = (function () {
 
   function syncConnectionButton() {
     const btn = $("#agent-connect");
-    const on = AgentClaude.isConnected();
+    const on = AgentService.isReady();
     btn.textContent = on ? "Claude connected" : "Connect Claude";
     btn.classList.toggle("btn-primary", on);
     btn.classList.toggle("btn-ghost", !on);

@@ -1,7 +1,8 @@
 /* floor/app.js — rendering, dragging, timers and event wiring. Depends on FloorStorage. */
 
 const FloorApp = (function () {
-  let state = FloorStorage.load();
+  // Loaded in init(), after Store has hydrated — see food/app.js.
+  let state = null;
   let selectedId = null;
   // Off by default and never persisted: a shift always starts with the room
   // locked, so a tap can only ever change a table's status.
@@ -20,7 +21,7 @@ const FloorApp = (function () {
   const el = Core.el;
   function persist() { FloorStorage.save(state); }
   function clamp(n, min, max) { return Math.min(max, Math.max(min, n)); }
-  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  const uid = Ids.uuid;
 
   const toast = Core.toast;
 
@@ -37,7 +38,7 @@ const FloorApp = (function () {
     return mins === 1 ? "1 min" : `${mins} min`;
   }
   function fmtTimeOfDay(ts) {
-    return new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return new Date(Time.ms(ts)).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
 
   // ---------- modal ----------
@@ -55,7 +56,7 @@ const FloorApp = (function () {
   function metaText(table) {
     if (table.status === "clean") return `${table.seats} top`;
     const guests = table.guests || 0;
-    const clock = table.seatedAt ? fmtClock(Date.now() - table.seatedAt) : "--";
+    const clock = table.seatedAt ? fmtClock(Time.since(table.seatedAt)) : "--";
     return `${guests}g · ${clock}`;
   }
 
@@ -155,114 +156,25 @@ const FloorApp = (function () {
   // unit on the stat strip, one entry in the seating picker, one combined seat
   // count. Nothing is stored for a join — it is read from where the tables sit,
   // so dragging them apart un-joins them with no extra bookkeeping.
+  //
+  // The geometry itself lives in floor/geometry.js, which knows nothing about
+  // the DOM, so the hardest rule in this tool can be tested without a browser.
+  const FLOOR_ASPECT = FloorGeometry.FLOOR_ASPECT;
 
-  // The floor is a 16:10 box. x and w are percentages of its width, y a
-  // percentage of its height, and each shape class fixes a width:height ratio.
-  // To compare distances on both axes they all have to be in the same unit, so
-  // everything below works in percent-of-floor-WIDTH.
-  const FLOOR_ASPECT = 16 / 10;
-  const SHAPE_ASPECT = { round: 1, stool: 1, square: 1, booth: 2, communal: 3 };
-  // How close two edges have to be to count as touching, in the same units:
-  // roughly a finger's width of slack at a normal floor size.
-  const JOIN_TOLERANCE = 1.0;
-
-  function tableBox(t) {
-    const w = Number(t.w) || 0;
-    const h = w / (SHAPE_ASPECT[t.shape] || 1);
-    const cx = Number(t.x) || 0;
-    const cy = (Number(t.y) || 0) / FLOOR_ASPECT;
-    return { left: cx - w / 2, right: cx + w / 2, top: cy - h / 2, bottom: cy + h / 2 };
-  }
-
-  function boxesTouch(a, b) {
-    return (
-      a.left - JOIN_TOLERANCE < b.right &&
-      b.left - JOIN_TOLERANCE < a.right &&
-      a.top - JOIN_TOLERANCE < b.bottom &&
-      b.top - JOIN_TOLERANCE < a.bottom
-    );
-  }
-
-  function makeGroup(members) {
-    const sorted = members
-      .slice()
-      .sort((a, b) => String(a.label).localeCompare(String(b.label), undefined, { numeric: true }));
-    const boxes = sorted.map(tableBox);
-    return {
-      tables: sorted,
-      ids: sorted.map((t) => t.id),
-      label: sorted.map((t) => t.label).join(" + "),
-      seats: sorted.reduce((s, t) => s + (Number(t.seats) || 0), 0),
-      guests: sorted.reduce((s, t) => s + (Number(t.guests) || 0), 0),
-      // A join is seated if any part of it is, and dirty if any part still
-      // needs bussing — you can't sit a new party at half of it.
-      status: sorted.some((t) => t.status === "seated")
-        ? "seated"
-        : sorted.some((t) => t.status === "dirty")
-        ? "dirty"
-        : "clean",
-      seatedAt: sorted.reduce((earliest, t) => {
-        if (!t.seatedAt) return earliest;
-        return !earliest || t.seatedAt < earliest ? t.seatedAt : earliest;
-      }, null),
-      box: {
-        left: Math.min.apply(null, boxes.map((b) => b.left)),
-        right: Math.max.apply(null, boxes.map((b) => b.right)),
-        top: Math.min.apply(null, boxes.map((b) => b.top)),
-        bottom: Math.max.apply(null, boxes.map((b) => b.bottom)),
-      },
-    };
-  }
-
-  // Every run of touching tables in a layout, as connected components.
   function groupsFor(layoutId) {
-    const list = state.layouts[layoutId] || [];
-    const boxes = list.map(tableBox);
-    const seen = new Array(list.length).fill(false);
-    const groups = [];
-    for (let i = 0; i < list.length; i++) {
-      if (seen[i]) continue;
-      seen[i] = true;
-      const stack = [i];
-      const members = [];
-      while (stack.length) {
-        const k = stack.pop();
-        members.push(list[k]);
-        for (let j = 0; j < list.length; j++) {
-          if (!seen[j] && boxesTouch(boxes[k], boxes[j])) {
-            seen[j] = true;
-            stack.push(j);
-          }
-        }
-      }
-      if (members.length > 1) groups.push(makeGroup(members));
-    }
-    return groups;
+    return FloorGeometry.groups(state.layouts[layoutId] || []);
   }
 
   function groupOf(tableId, layoutId) {
     return groupsFor(layoutId || state.activeLayout).find((g) => g.ids.indexOf(tableId) !== -1) || null;
   }
 
-  // What the floor is actually made of once joins are taken into account: a
-  // joined run counts once, an unjoined table counts once. Stats, the seating
-  // picker and the detail panel all work in units rather than tables.
   function unitsFor(layoutId) {
-    const groups = groupsFor(layoutId);
-    const claimed = new Set();
-    groups.forEach((g) => g.ids.forEach((id) => claimed.add(id)));
-    const units = groups.map((g) => ({ group: g, tables: g.tables, label: g.label, seats: g.seats, guests: g.guests, status: g.status, seatedAt: g.seatedAt, joined: true }));
-    (state.layouts[layoutId] || []).forEach((t) => {
-      if (claimed.has(t.id)) return;
-      units.push({ group: null, tables: [t], label: t.label, seats: Number(t.seats) || 0, guests: Number(t.guests) || 0, status: t.status, seatedAt: t.seatedAt, joined: false });
-    });
-    return units;
+    return FloorGeometry.units(state.layouts[layoutId] || []);
   }
 
   function unitFor(table) {
-    const g = groupOf(table.id);
-    if (g) return { group: g, tables: g.tables, label: g.label, seats: g.seats, guests: g.guests, status: g.status, seatedAt: g.seatedAt, joined: true };
-    return { group: null, tables: [table], label: table.label, seats: Number(table.seats) || 0, guests: Number(table.guests) || 0, status: table.status, seatedAt: table.seatedAt, joined: false };
+    return FloorGeometry.unitFor(table, tables());
   }
 
   // The unit the open table belongs to, recomputed each time so it follows the
@@ -378,7 +290,7 @@ const FloorApp = (function () {
   function applyStatus(table, status) {
     if (table.status === status) return false;
     if (status === "seated") {
-      table.seatedAt = Date.now();
+      table.seatedAt = Time.now();
       table.lastTurnMs = null;
       // Deliberately does NOT default the guest count. On a joined run the
       // party has already been spread across these tables, and a table holding
@@ -387,7 +299,8 @@ const FloorApp = (function () {
       // caller owns the default instead.
     } else if (status === "clean") {
       // Turn is over: bank the elapsed time and stop the clock.
-      if (table.seatedAt) table.lastTurnMs = Date.now() - table.seatedAt;
+      // lastTurnMs is a DURATION, not an instant, so it stays milliseconds.
+      if (table.seatedAt) table.lastTurnMs = Time.since(table.seatedAt);
       table.seatedAt = null;
       table.guests = 0;
       table.party = null;
@@ -409,6 +322,11 @@ const FloorApp = (function () {
     });
     if (!changed) return;
     if (fillToCapacity) setUnitGuests(unit, unit.seats);
+    Audit.record(Audit.ACTIONS.TABLE_STATUS_CHANGED, {
+      entity: "table", entityId: unit.tables[0].id,
+      summary: `${unit.joined ? "Run" : "Table"} ${unit.label} → ${FloorStorage.STATUS_LABELS[status]}`,
+      after: status,
+    });
     persist();
     // renderFloor repaints every table, the join bands and the panel — a join
     // changing status changes all three.
@@ -423,12 +341,8 @@ const FloorApp = (function () {
   // count before spilling into the next — so a 6-top and a 4-top pushed
   // together read as 6 and 2 rather than 5 and 5.
   function setUnitGuests(unit, total) {
-    let left = Math.max(0, Number(total) || 0);
-    unit.tables.forEach((t, i) => {
-      const capacity = i === unit.tables.length - 1 ? left : Math.min(left, Number(t.seats) || 0);
-      t.guests = capacity;
-      left -= capacity;
-    });
+    const split = FloorGeometry.distributeGuests(unit.tables, total);
+    unit.tables.forEach((t, i) => (t.guests = split[i]));
   }
 
   // ---------- table detail panel ----------
@@ -471,7 +385,7 @@ const FloorApp = (function () {
     panel.appendChild(el("div", { class: "tp-timer" }, [
       el("div", { class: "label" }, [running ? "Seated for" : "Timer stopped"]),
       el("div", { class: "clock" + (running ? " running" : ""), id: "tp-clock" }, [
-        running ? fmtClock(Date.now() - unit.seatedAt) : "0:00",
+        running ? fmtClock(Time.since(unit.seatedAt)) : "0:00",
       ]),
     ]));
 
@@ -536,6 +450,9 @@ const FloorApp = (function () {
   // ---------- waitlist ----------
   function addWaitEntry(entry) {
     state.waitlist.push(entry);
+    Audit.record(Audit.ACTIONS.WAITLIST_ADDED, {
+      entity: "waitlist_entry", entityId: entry.id, summary: `${entry.name}, party of ${entry.party}`,
+    });
     persist();
     renderWaitlist();
   }
@@ -557,13 +474,10 @@ const FloorApp = (function () {
         .filter((u) => u.status === "clean")
         .forEach((unit) => options.push({ unit, layout }));
     });
-    return options.sort((a, b) => {
-      const aFits = a.unit.seats >= partySize;
-      const bFits = b.unit.seats >= partySize;
-      if (aFits !== bFits) return aFits ? -1 : 1;
-      // Fitting units: tightest fit first. Too-small ones: biggest first.
-      return aFits ? a.unit.seats - b.unit.seats : b.unit.seats - a.unit.seats;
-    });
+    // Tightest fit first among those that fit, then the too-small ones biggest
+    // first — the ranking lives in geometry so it can be tested directly.
+    const ranked = FloorGeometry.rankForParty(options.map((o) => o.unit), partySize);
+    return ranked.map((unit) => options.find((o) => o.unit === unit));
   }
 
   function seatEntryAt(entry, unit, layoutId) {
@@ -579,6 +493,10 @@ const FloorApp = (function () {
     selectedId = unit.tables[0].id;
     unit.tables.forEach((t) => applyStatus(t, "seated"));
     state.waitlist = state.waitlist.filter((w) => w.id !== entry.id);
+    Audit.record(Audit.ACTIONS.WAITLIST_SEATED, {
+      entity: "waitlist_entry", entityId: entry.id,
+      summary: `${entry.name} seated at ${unit.label}`,
+    });
     persist();
     renderFloor();
     renderWaitlist();
@@ -631,7 +549,7 @@ const FloorApp = (function () {
     const now = Date.now();
     const parties = state.waitlist.length;
     const guests = state.waitlist.reduce((sum, w) => sum + (Number(w.party) || 0), 0);
-    const longest = state.waitlist.reduce((max, w) => Math.max(max, now - w.addedAt), 0);
+    const longest = state.waitlist.reduce((max, w) => Math.max(max, now - Time.ms(w.addedAt)), 0);
     const stats = [
       { label: "Parties Waiting", value: String(parties) },
       { label: "Guests Waiting", value: String(guests) },
@@ -667,7 +585,7 @@ const FloorApp = (function () {
       const form = el("form", {}, [
         el("div", { class: "tp-party" }, [
           el("div", {}, [`Added ${fmtTimeOfDay(entry.addedAt)}`]),
-          el("div", { class: "muted" }, [`Waiting ${fmtMinutes(Date.now() - entry.addedAt)} — editing doesn't restart the clock.`]),
+          el("div", { class: "muted" }, [`Waiting ${fmtMinutes(Time.since(entry.addedAt))} — editing doesn't restart the clock.`]),
         ]),
         // Same three-across layout as the Add Party form, so the host isn't
         // hunting for a field they just used.
@@ -687,10 +605,15 @@ const FloorApp = (function () {
         e.preventDefault();
         const name = draft.name.trim();
         if (!name) { toast("Name is required"); nameInput.focus(); return; }
+        const before = { party: entry.party };
         entry.name = name;
         entry.phone = draft.phone.trim();
         entry.party = Math.max(1, parseInt(draft.party, 10) || 1);
         entry.notes = draft.notes.trim();
+        Audit.record(Audit.ACTIONS.WAITLIST_EDITED, {
+          entity: "waitlist_entry", entityId: entry.id,
+          summary: `${entry.name} edited`, before: before, after: { party: entry.party },
+        });
         persist();
         renderWaitlist();
         close();
@@ -703,7 +626,7 @@ const FloorApp = (function () {
   }
 
   function waitNode(entry) {
-    const waited = Date.now() - entry.addedAt;
+    const waited = Time.since(entry.addedAt);
     const tone = waitClass(waited);
 
     const main = el("div", { class: "wait-main" }, [
@@ -717,7 +640,7 @@ const FloorApp = (function () {
     return el("div", { class: "wait-item" + (tone ? " waiting-" + (tone === "over" ? "over" : "long") : ""), "data-id": entry.id }, [
       main,
       el("div", { class: "wait-clock" }, [
-        el("div", { class: "elapsed " + tone, "data-since": String(entry.addedAt) }, [fmtClock(waited)]),
+        el("div", { class: "elapsed " + tone, "data-since": String(Time.ms(entry.addedAt)) }, [fmtClock(waited)]),
         el("div", { class: "quoted" }, ["waiting"]),
       ]),
       el("div", { class: "wait-actions" }, [
@@ -791,6 +714,7 @@ const FloorApp = (function () {
           class: "btn btn-primary",
           onclick: () => {
             FloorStorage.clearShift(state);
+            Audit.record(Audit.ACTIONS.SHIFT_CLEARED, { entity: "shift", summary: "End of shift — floor and waitlist cleared" });
             selectedId = null;
             persist();
             renderFloor();
@@ -862,6 +786,9 @@ const FloorApp = (function () {
   }
 
   function init() {
+    state = FloorStorage.load();
+    // So an export reflects what this tool is holding right now.
+    Portability.registerSource("floor", () => state);
     $("#floor-tabs").addEventListener("click", (e) => {
       const btn = e.target.closest(".tab-btn");
       if (btn) switchTab(btn.dataset.tab);
@@ -898,7 +825,7 @@ const FloorApp = (function () {
         phone: $("#wait-phone").value.trim(),
         party: Math.max(1, parseInt($("#wait-party").value, 10) || 1),
         notes: $("#wait-notes").value.trim(),
-        addedAt: Date.now(),
+        addedAt: Time.now(),
       });
       e.target.reset();
       $("#wait-party").value = "2";
@@ -919,7 +846,7 @@ const FloorApp = (function () {
     const all = FloorStorage.LAYOUTS.flatMap((l) => unitsFor(l.id));
     const seated = all.filter((u) => u.status === "seated");
     const now = Date.now();
-    const waits = state.waitlist.map((w) => now - w.addedAt);
+    const waits = state.waitlist.map((w) => now - Time.ms(w.addedAt));
     return {
       tables: all.length,
       seated: seated.length,
@@ -930,7 +857,7 @@ const FloorApp = (function () {
       seats: all.reduce((s, u) => s + u.seats, 0),
       waiting: state.waitlist.length,
       longestWaitMs: waits.length ? Math.max(...waits) : 0,
-      quotedParties: state.waitlist.slice(0, 3).map((w) => ({ name: w.name, party: w.party, waitedMs: now - w.addedAt })),
+      quotedParties: state.waitlist.slice(0, 3).map((w) => ({ name: w.name, party: w.party, waitedMs: now - Time.ms(w.addedAt) })),
     };
   }
 
@@ -948,7 +875,7 @@ const FloorApp = (function () {
         seats: u.seats,
         status: FloorStorage.STATUS_LABELS[u.status] || u.status,
         guests: u.guests,
-        seatedFor: u.seatedAt ? fmtMinutes(now - u.seatedAt) : null,
+        seatedFor: u.seatedAt ? fmtMinutes(now - Time.ms(u.seatedAt)) : null,
         lastTurn: u.tables.map((t) => t.lastTurnMs).filter(Boolean).sort((a, b) => b - a)[0]
           ? fmtMinutes(u.tables.map((t) => t.lastTurnMs).filter(Boolean).sort((a, b) => b - a)[0])
           : null,

@@ -126,13 +126,20 @@ only mislead.
 
 ## Data
 
-Each tool keeps its own key, so resetting one never touches another:
+Data is reached through `platform/storage.js`, never through `localStorage`
+directly, so the adapter underneath can be swapped for a real database without
+touching any business logic. Keys are namespaced by organization from the
+start:
 
-| Tool | localStorage key |
+| Tool | Key |
 | --- | --- |
-| Food | `gbg.food.v1` |
-| Beverage | `gbg.bev.v1` |
-| Front of House | `gbg.floor.v1` |
+| Food | `86d:{organization}:food` |
+| Beverage | `86d:{organization}:bev` |
+| Front of House | `86d:{organization}:floor` |
+| Audit trail | `86d:{organization}:audit` |
+
+The organization is `demo` until authentication exists. Data written under the
+older un-namespaced keys is adopted automatically on first load.
 
 Each ships with a seeded starting set — real foodservice and wholesale pricing
 for the kitchen, a working cocktail program for the bar, and a busy Friday
@@ -145,16 +152,73 @@ Each tool's **Reset Data** button puts that one tool back to its seed.
 ## Layout
 
 ```
-index.html          the shell: masthead, section bar, every panel's container
-css/styles.css      one design system; each tool restates --brand on its wrapper
-js/core.js          shared helpers: DOM building, the one modal, the one toast
-js/shell.js         section switching and the combined dashboard
-js/food/            calc.js (pure math) · storage.js (state + seed) · app.js (render)
-js/bev/             same three
-js/floor/           demo.js (Friday night) · storage.js · app.js
-js/agent/           engine.js (offline answers) · claude.js (API) · app.js (chat)
+index.html            the shell: masthead, section bar, every panel's container
+css/styles.css        one design system; each tool restates --brand on its wrapper
+
+js/platform/          the seam between this app and its eventual backend
+  storage.js            Store + adapters — modules never touch localStorage
+  org.js                which restaurant this data belongs to
+  ids.js                UUIDs for records, stable slugs for seeds
+  time.js               ISO 8601 UTC stored, human formatting at render
+  errors.js             validation / storage / network / calculation / ai
+  audit.js              who changed what, shaped like the future audit_log
+  csv.js                parsing, writing and per-row validation
+  portability.js        export everything; analyse an import before writing
+
+js/core.js            DOM building, the one modal, the one toast
+js/shell.js           section switching, boot, and the combined dashboard
+js/food/              calc.js (pure) · storage.js (state + seed) · app.js (render)
+js/bev/               same three
+js/floor/             geometry.js (pure) · storage.js · demo.js · app.js
+js/agent/             engine.js (offline) · context.js · service.js ·
+                      provider-browser.js · app.js
+tests/                node tests/run.js — no dependencies
 ```
 
 Each tool's `app.js` scopes every DOM lookup to its own `#mod-*` subtree, so
 all three can use the same class names without colliding. The modal and the
 toast are the house's, borrowed from `Core`.
+
+The calculation layer — `food/calc.js`, `bev/calc.js`, `floor/geometry.js` — is
+pure functions over plain objects, with no DOM and no storage. That is what
+makes it testable in Node, and what will let it move to a server unchanged.
+
+## Running the tests
+
+```
+node tests/run.js
+```
+
+75 tests over the logic worth protecting: recipe and pour costing, recursive
+prep expansion, inventory availability and par levels, table-join geometry and
+seating, CSV parsing and validation, IDs, timestamps, the storage abstraction
+and AI context scoping. No dependencies, no build step — the harness evaluates
+the same source files the browser loads.
+
+## Data portability
+
+Nothing here holds a restaurant's data hostage.
+
+```js
+Portability.exportBundle()        // the whole organization as JSON
+Portability.exportCsv("recipes")  // one sheet a spreadsheet can open
+Portability.sheets()              // what can be exported
+```
+
+`Portability.analyze(sheet, csvText)` parses, maps and validates an import
+without writing anything, so a file can be previewed before it lands. See
+`IMPORTS.md`.
+
+## Architecture documents
+
+This prototype is being prepared to become a small commercial product. The
+plan, and the honest account of what is not ready, live in:
+
+| | |
+|---|---|
+| `ARCHITECTURE.md` | How it is built, what breaks with more than one restaurant, and the target |
+| `DATA_MODEL.md` | The entities the SaaS version needs, with ownership and relationships |
+| `PERMISSIONS.md` | Owner / Manager / Staff, and which existing actions need a check |
+| `SECURITY.md` | Current risks and the production blockers |
+| `AI_ARCHITECTURE.md` | How Ask works and where the API key has to move |
+| `IMPORTS.md` | The CSV-first import workflow, and why not a POS API yet |

@@ -3,8 +3,11 @@
    the house's, borrowed from Core. */
 
 const FoodApp = (function () {
-  let state = FoodStorage.load();
-  let activeEventId = state.events.length ? state.events[0].id : null;
+  // Loaded in init(), not here: Store must hydrate from its adapter before any
+  // module reads, and an adapter is asynchronous by definition. Reading at
+  // script-parse time is what tied this app to synchronous localStorage.
+  let state = null;
+  let activeEventId = null;
 
   const MENUS = ["Appetizers", "Lunch", "Dinner"];
 
@@ -67,6 +70,7 @@ const FoodApp = (function () {
   function resetData() {
     if (confirm("Reset the food program to the built-in sample kitchen? This discards the counts, prices and menu changes you've made here.")) {
       state = FoodStorage.resetToDefaults();
+      Audit.record(Audit.ACTIONS.DATA_RESET, { entity: "food", summary: "Food program reset to the sample kitchen" });
       activeEventId = state.events.length ? state.events[0].id : null;
       renderAll();
       toast("Food data reset to defaults.");
@@ -277,7 +281,7 @@ const FoodApp = (function () {
           if (existing) {
             Object.assign(existing, draft);
           } else {
-            draft.id = FoodCalc.uid("ing");
+            draft.id = Ids.prefixed("ing");
             state.ingredients.push(draft);
           }
           persist();
@@ -508,7 +512,7 @@ const FoodApp = (function () {
             {
               type: "button", class: "btn btn-sm", style: "margin-top:8px",
               onclick: () => {
-                draft.components.push({ id: FoodCalc.uid("comp"), ingredientId: state.ingredients[0] ? state.ingredients[0].id : "", qty: 0 });
+                draft.components.push({ id: Ids.prefixed("comp"), ingredientId: state.ingredients[0] ? state.ingredients[0].id : "", qty: 0 });
                 render();
               },
             },
@@ -565,7 +569,7 @@ const FoodApp = (function () {
           if (existing) {
             Object.assign(existing, draft);
           } else {
-            draft.id = FoodCalc.uid("rec");
+            draft.id = Ids.prefixed("rec");
             state.recipes.push(draft);
           }
           persist();
@@ -767,6 +771,10 @@ const FoodApp = (function () {
       return;
     }
     if (!confirm(`Top ${low.length} item${low.length === 1 ? "" : "s"} up to par? Use this after a delivery is put away.`)) return;
+    Audit.record(Audit.ACTIONS.INVENTORY_FILLED_TO_PAR, {
+      entity: "inventory", summary: `${low.length} ${"food" === "food" ? "kitchen" : "bar"} items topped up to par`,
+      after: low.map((i) => i.name),
+    });
     low.forEach((i) => (i.onHandQty = i.parQty));
     persist();
     renderAll();
@@ -1327,7 +1335,7 @@ const FoodApp = (function () {
     const used = new Set(ev.lines.map((l) => l.recipeId));
     const next = state.recipes.find((r) => !used.has(r.id)) || state.recipes[0];
     ev.lines.push({
-      id: FoodCalc.uid("ln"),
+      id: Ids.prefixed("ln"),
       recipeId: next.id,
       portionsPerGuest: 1,
       overagePct: state.settings.defaultOveragePct || 10,
@@ -1352,7 +1360,7 @@ const FoodApp = (function () {
       alert("Add an ingredient first.");
       return;
     }
-    ev.supplies.push({ id: FoodCalc.uid("sup"), ingredientId: disposable.id, qtyPerGuest: 1 });
+    ev.supplies.push({ id: Ids.prefixed("sup"), ingredientId: disposable.id, qtyPerGuest: 1 });
     persist();
     renderEvents();
   }
@@ -1417,7 +1425,7 @@ const FoodApp = (function () {
           if (existing) {
             Object.assign(existing, draft);
           } else {
-            draft.id = FoodCalc.uid("ev");
+            draft.id = Ids.prefixed("ev");
             state.events.push(draft);
             activeEventId = draft.id;
           }
@@ -1436,11 +1444,11 @@ const FoodApp = (function () {
     const ev = getEvent(id);
     if (!ev) return;
     const copy = JSON.parse(JSON.stringify(ev));
-    copy.id = FoodCalc.uid("ev");
+    copy.id = Ids.prefixed("ev");
     copy.name = ev.name + " (copy)";
     delete copy.sinceVersion;
-    copy.lines.forEach((l) => (l.id = FoodCalc.uid("ln")));
-    (copy.supplies || []).forEach((s) => (s.id = FoodCalc.uid("sup")));
+    copy.lines.forEach((l) => (l.id = Ids.prefixed("ln")));
+    (copy.supplies || []).forEach((s) => (s.id = Ids.prefixed("sup")));
     state.events.push(copy);
     activeEventId = copy.id;
     persist();
@@ -1621,6 +1629,10 @@ const FoodApp = (function () {
   }
 
   function init() {
+    state = FoodStorage.load();
+    // So an export reflects what this tool is holding right now.
+    Portability.registerSource("food", () => state);
+    activeEventId = state.events.length ? state.events[0].id : null;
     $all(".tab-btn").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
     $("#food-btn-reset").addEventListener("click", resetData);
     renderAll();

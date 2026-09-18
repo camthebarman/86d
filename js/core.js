@@ -8,7 +8,9 @@ const Core = (function () {
     Object.entries(attrs || {}).forEach(([k, v]) => {
       if (v == null || v === false) return;
       if (k === "class") node.className = v;
-      else if (k === "html") node.innerHTML = v;
+      // Deliberately no `html:` escape hatch. Every value that reaches the DOM
+      // through this builder goes in as a text node, so a guest name, a table
+      // note or an imported product description can never become markup.
       else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
       else node.setAttribute(k, v);
     });
@@ -57,9 +59,9 @@ const Core = (function () {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  function uid(prefix) {
-    return (prefix || "id") + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-  }
+  // Kept as a thin alias so existing callers keep working; the strategy and
+  // the format live in platform/ids.js.
+  const uid = Ids.prefixed;
 
   function ready(fn) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn);

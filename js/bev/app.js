@@ -3,7 +3,8 @@
    and the toast are the house's, borrowed from Core. */
 
 const BevApp = (function () {
-  let state = BevStorage.load();
+  // Loaded in init(), after Store has hydrated — see food/app.js.
+  let state = null;
 
   const CATEGORIES = ["Spirit", "Liqueur", "Wine", "Beer", "Mixer", "Juice", "Syrup", "Ice", "Garnish", "Straw", "Dry Goods", "Other"];
   const PREP_CATEGORIES = ["Syrup", "Concentrate", "Infusion", "Mix", "Other"];
@@ -61,6 +62,7 @@ const BevApp = (function () {
   function resetData() {
     if (confirm("Reset the beverage program to the built-in sample bar? This discards the counts, prices and recipe changes you've made here.")) {
       state = BevStorage.resetToDefaults();
+      Audit.record(Audit.ACTIONS.DATA_RESET, { entity: "bev", summary: "Beverage program reset to the sample bar" });
       renderAll();
       toast("Beverage data reset to defaults.");
     }
@@ -228,7 +230,7 @@ const BevApp = (function () {
           if (existing) {
             Object.assign(existing, draft);
           } else {
-            draft.id = BevCalc.uid("ing");
+            draft.id = Ids.prefixed("ing");
             state.ingredients.push(draft);
           }
           persist();
@@ -399,7 +401,7 @@ const BevApp = (function () {
               class: "btn btn-sm",
               style: "margin-top:8px",
               onclick: () => {
-                draft.components.push({ id: BevCalc.uid("pcomp"), ingredientId: state.ingredients[0] ? state.ingredients[0].id : "", qty: 0 });
+                draft.components.push({ id: Ids.prefixed("pcomp"), ingredientId: state.ingredients[0] ? state.ingredients[0].id : "", qty: 0 });
                 render();
               },
             },
@@ -437,7 +439,7 @@ const BevApp = (function () {
           if (existing) {
             Object.assign(existing, draft);
           } else {
-            draft.id = BevCalc.uid("prep");
+            draft.id = Ids.prefixed("prep");
             state.preps.push(draft);
           }
           persist();
@@ -529,7 +531,7 @@ const BevApp = (function () {
         draft.defaultIceOz = Number(draft.defaultIceOz) || 0;
         if (existing) Object.assign(existing, draft);
         else {
-          draft.id = BevCalc.uid("glass");
+          draft.id = Ids.prefixed("glass");
           state.glassSizes.push(draft);
         }
         persist();
@@ -694,10 +696,10 @@ const BevApp = (function () {
         const hasIce = draft.components.some((c) => getIngredient(c.ingredientId)?.category === "Ice");
         const hasStraw = draft.components.some((c) => getIngredient(c.ingredientId)?.category === "Straw");
         if (!hasIce && glass.defaultIceOz > 0 && state.settings.defaultIceIngredientId) {
-          draft.components.push({ id: BevCalc.uid("comp"), ingredientId: state.settings.defaultIceIngredientId, qty: glass.defaultIceOz, label: "Ice" });
+          draft.components.push({ id: Ids.prefixed("comp"), ingredientId: state.settings.defaultIceIngredientId, qty: glass.defaultIceOz, label: "Ice" });
         }
         if (!hasStraw && glass.defaultStraw && state.settings.defaultStrawIngredientId) {
-          draft.components.push({ id: BevCalc.uid("comp"), ingredientId: state.settings.defaultStrawIngredientId, qty: 1, label: "Straw" });
+          draft.components.push({ id: Ids.prefixed("comp"), ingredientId: state.settings.defaultStrawIngredientId, qty: 1, label: "Straw" });
         }
       }
 
@@ -762,7 +764,7 @@ const BevApp = (function () {
               class: "btn btn-sm",
               style: "margin-top:8px",
               onclick: () => {
-                draft.components.push({ id: BevCalc.uid("comp"), ingredientId: state.ingredients[0] ? state.ingredients[0].id : "", qty: 0 });
+                draft.components.push({ id: Ids.prefixed("comp"), ingredientId: state.ingredients[0] ? state.ingredients[0].id : "", qty: 0 });
                 render();
               },
             },
@@ -819,7 +821,7 @@ const BevApp = (function () {
           if (existing) {
             Object.assign(existing, draft);
           } else {
-            draft.id = BevCalc.uid("rec");
+            draft.id = Ids.prefixed("rec");
             state.recipes.push(draft);
           }
           persist();
@@ -1138,6 +1140,10 @@ const BevApp = (function () {
       return;
     }
     if (!confirm(`Top ${low.length} item${low.length === 1 ? "" : "s"} up to par? Use this after a delivery is put away.`)) return;
+    Audit.record(Audit.ACTIONS.INVENTORY_FILLED_TO_PAR, {
+      entity: "inventory", summary: `${low.length} ${"bev" === "food" ? "kitchen" : "bar"} items topped up to par`,
+      after: low.map((i) => i.name),
+    });
     low.forEach((i) => (i.onHandQty = i.parQty));
     persist();
     renderInventory();
@@ -1456,6 +1462,9 @@ const BevApp = (function () {
   }
 
   function init() {
+    state = BevStorage.load();
+    // So an export reflects what this tool is holding right now.
+    Portability.registerSource("bev", () => state);
     $all(".tab-btn").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
     $("#bev-btn-reset").addEventListener("click", resetData);
     renderAll();

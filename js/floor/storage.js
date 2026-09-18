@@ -1,4 +1,4 @@
-/* floor/storage.js — state shape, seed layouts, localStorage persistence.
+/* floor/storage.js — state shape, seed layouts, persistence via platform/storage.
 
    State holds only what a host actually changes during service: each table's
    position, status, guest count, notes and seat-timer. Room fixtures (walls,
@@ -10,7 +10,7 @@
    the positions they've already dragged into place. */
 
 const FloorStorage = (function () {
-  const KEY = "gbg.floor.v1";
+  const COLLECTION = "floor";
   const SEED_VERSION = 1;
 
   const STATUSES = ["clean", "seated", "dirty"];
@@ -135,26 +135,43 @@ const FloorStorage = (function () {
     return state;
   }
 
+  // Reads the hydrated cache rather than the device directly.
   function load() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return defaultState();
-      const parsed = JSON.parse(raw);
-      if (!parsed || !parsed.layouts || !Array.isArray(parsed.waitlist)) return defaultState();
-      if (!LAYOUTS.some((l) => l.id === parsed.activeLayout)) parsed.activeLayout = "dining";
-      return applySeedUpdates(parsed);
-    } catch (e) {
-      console.warn("Failed to load saved data, using defaults.", e);
-      return defaultState();
+    const saved = Store.get(COLLECTION, undefined);
+    if (!saved || !saved.layouts || !Array.isArray(saved.waitlist)) return defaultState();
+    if (!LAYOUTS.some((l) => l.id === saved.activeLayout)) saved.activeLayout = "dining";
+    const state = normalize(applySeedUpdates(saved));
+    // Write the normalised form straight back, so the stored copy stops being
+    // a mix of epoch numbers and ISO strings after the very first load rather
+    // than whenever the next edit happens to land.
+    if (state.__renormalized) {
+      delete state.__renormalized;
+      save(state);
     }
+    return state;
+  }
+
+  // Instants stored before platform/time.js existed are epoch milliseconds.
+  // They are rewritten as ISO on first load so the store only ever holds one
+  // format; Time.ms() reads either, so a half-migrated device still works.
+  function normalize(state) {
+    let changed = false;
+    const toIso = (value) => {
+      if (value == null) return value;
+      const iso = Time.iso(value);
+      if (iso !== value) changed = true;
+      return iso;
+    };
+    LAYOUTS.forEach((layout) => {
+      (state.layouts[layout.id] || []).forEach((t) => { t.seatedAt = toIso(t.seatedAt); });
+    });
+    (state.waitlist || []).forEach((w) => { w.addedAt = toIso(w.addedAt); });
+    if (changed) state.__renormalized = true;
+    return state;
   }
 
   function save(state) {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state));
-    } catch (e) {
-      console.warn("Failed to save data.", e);
-    }
+    return Store.set(COLLECTION, state);
   }
 
   // End of shift: empty the waitlist and hand every table back clean, notes
@@ -190,5 +207,5 @@ const FloorStorage = (function () {
     return state;
   }
 
-  return { load, save, defaultState, clearShift, resetPositions, fixtures, LAYOUTS, STATUSES, STATUS_LABELS, KEY };
+  return { load, save, defaultState, clearShift, resetPositions, fixtures, normalize, LAYOUTS, STATUSES, STATUS_LABELS, COLLECTION };
 })();

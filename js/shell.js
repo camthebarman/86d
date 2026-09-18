@@ -127,7 +127,7 @@
     panel.innerHTML = "";
     panel.append(
       el("div", { class: "hero" }, [
-        el("h2", {}, ["Tonight at Generic Bar & Grill"]),
+        el("h2", {}, [`Tonight at ${Org.name()}`]),
         el("p", { class: "sub" }, [
           "Every number below is live from the three tools behind this page — the kitchen's counts, the bar's counts, and the room as the host stand has it right now.",
         ]),
@@ -214,8 +214,25 @@
   }
 
   // ---------- boot ----------
-  Core.ready(function () {
+  Core.ready(async function () {
     Core.init();
+
+    // Everything below this line assumes the organization's data is in memory.
+    // This is the app's one asynchronous read — the seam a real backend slots
+    // into, since hydrate() is the only call that has to become a network trip.
+    try {
+      await Store.hydrate(["food", "bev", "floor", Audit.COLLECTION]);
+    } catch (err) {
+      console.warn(AppErrors.message(err));
+    }
+
+    // A failed write is the user's problem, not just the console's: it means
+    // the count they just took is not saved anywhere.
+    Store.onWriteErrorUse((err) => Core.toast(AppErrors.message(err)));
+
+    // The only AI provider that exists today. Swapping this one line for a
+    // ServerProvider is the whole of the production AI migration.
+    AgentService.use(BrowserClaudeProvider);
 
     document.getElementById("section-tabs").addEventListener("click", (e) => {
       const btn = e.target.closest(".section-btn");

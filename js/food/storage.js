@@ -1,11 +1,12 @@
-/* food/storage.js — state shape, localStorage persistence, versioned seed data.
+/* food/storage.js — state shape, persistence via platform/storage, and
+   versioned seed data.
    Seed items use fixed ids and a `sinceVersion` tag so that when new
    ingredients/recipes/events are added later, anyone with existing saved
    data automatically gets the new ones merged in (without touching what
    they've already edited) instead of only new visitors seeing them. */
 
 const FoodStorage = (function () {
-  const KEY = "gbg.food.v1";
+  const COLLECTION = "food";
   const SEED_VERSION = 2;
 
   // ---- Ingredients ----
@@ -568,25 +569,19 @@ const FoodStorage = (function () {
     return !!(parsed && Array.isArray(parsed.ingredients) && Array.isArray(parsed.recipes));
   }
 
+  // Reads the hydrated cache rather than the device directly: Store owns the
+  // adapter, the organization namespace and the one slow read at boot.
   function load() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return defaultState();
-      const parsed = JSON.parse(raw);
-      if (!isValid(parsed)) return defaultState();
-      return normalize(applySeedUpdates(parsed));
-    } catch (e) {
-      console.warn("Failed to load saved data, using defaults.", e);
-      return defaultState();
-    }
+    const saved = Store.get(COLLECTION, undefined);
+    if (saved === undefined || !isValid(saved)) return defaultState();
+    return normalize(applySeedUpdates(saved));
   }
 
+  // Returns the write promise so a caller CAN await it; the app does not,
+  // because the in-memory state is already correct and Store reports a failed
+  // write through its own handler.
   function save(state) {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state));
-    } catch (e) {
-      console.warn("Could not save data.", e);
-    }
+    return Store.set(COLLECTION, state);
   }
 
   function resetToDefaults() {
@@ -595,5 +590,5 @@ const FoodStorage = (function () {
     return state;
   }
 
-  return { load, save, resetToDefaults, defaultState, normalize, isValid, KEY };
+  return { load, save, resetToDefaults, defaultState, normalize, isValid, COLLECTION };
 })();
