@@ -32,8 +32,6 @@ can change how it stores anything without breaking the front page.
 - **Recipes** — batch yields, plate costs, target food cost %, suggested price.
 - **Inventory** — the count sheet first, in whatever unit you count in, with
   par levels; below it, how many servings of each dish the shelf can produce.
-- **Insights** — popularity, menu engineering quadrants, cross-utilization,
-  orphan ingredients and workhorse ingredients.
 - **Usage** — weekly / monthly / annual cost, revenue and profit projections.
 - **Events** — catering builds with overage, a supplies list, a shopping list
   against inventory on hand, and a printable prep sheet.
@@ -64,7 +62,20 @@ own section of the count sheet, where "below par" means *batch more*.
 Tap a table to open it; tap it again to cycle clean → seated → dirty. Seat
 timers run while a table is seated and the last turn time is kept when it
 flips. **Arrange Tables** unlocks dragging so the plan can be made to match the
-real room — positions save as you go and survive a shift reset. The waitlist
+real room — positions save as you go and survive a shift reset.
+
+### Pushing tables together
+
+Drag two tables until they touch and they become one table: one unit on the
+stat strip, one entry in the seating picker, one combined seat count, and a
+band drawn around the run. Tapping any table in a run opens the whole run, and
+a status change moves all of it — you cannot seat a new party at half a join.
+Seating a party spreads it across the run, filling each table to its own seat
+count before spilling into the next. Dragging them apart splits the run again.
+
+Nothing is stored for a join. It is read from where the tables sit, so there is
+no join to get out of step with the floor, and a shift reset leaves the room
+arranged exactly as it was. The waitlist
 stamps a quote time when a party is added and colours the wait as it runs long;
 seating a party from the waitlist picks a table that actually fits it. A party
 already on the list can be edited — two more showed up, a better phone number,

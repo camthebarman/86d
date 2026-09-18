@@ -62,7 +62,11 @@ const FloorApp = (function () {
   function tableClass(table) {
     let cls = `table-shape shape-${table.shape} st-${table.status}`;
     if (table.w < 6) cls += " tiny";
-    if (table.id === selectedId) cls += " selected";
+    // Opening one table of a joined run highlights the whole run, because the
+    // run is what you are actually working with.
+    const unit = selectedUnit();
+    if (unit && unit.tables.some((t) => t.id === table.id)) cls += " selected";
+    if (groupOf(table.id)) cls += " joined";
     return cls;
   }
 
@@ -102,6 +106,7 @@ const FloorApp = (function () {
     const floor = $("#floor");
     floor.innerHTML = "";
     FloorStorage.fixtures(state.activeLayout).forEach((f) => floor.appendChild(fixtureNode(f)));
+    groupsFor(state.activeLayout).forEach((g) => floor.appendChild(joinBandNode(g)));
     tables().forEach((t) => floor.appendChild(tableNode(t)));
     renderFloorStats();
     renderTablePanel();
@@ -121,9 +126,12 @@ const FloorApp = (function () {
   function renderFloorStats() {
     const counts = { clean: 0, seated: 0, dirty: 0 };
     let guests = 0;
-    tables().forEach((t) => {
-      counts[t.status] = (counts[t.status] || 0) + 1;
-      if (t.status === "seated") guests += Number(t.guests) || 0;
+    let joined = 0;
+    // Counted in units: two tables pushed together are one table to a host.
+    unitsFor(state.activeLayout).forEach((u) => {
+      counts[u.status] = (counts[u.status] || 0) + 1;
+      if (u.status === "seated") guests += u.guests;
+      if (u.joined) joined += 1;
     });
     const stats = [
       { label: "Clean", value: counts.clean, cls: "" },
@@ -131,6 +139,7 @@ const FloorApp = (function () {
       { label: "Dirty", value: counts.dirty, cls: "dirty" },
       { label: "Guests Seated", value: guests, cls: "" },
     ];
+    if (joined) stats.push({ label: joined === 1 ? "Joined Run" : "Joined Runs", value: joined, cls: "" });
     const wrap = $("#floor-stats");
     wrap.innerHTML = "";
     stats.forEach((s) => {
@@ -139,6 +148,146 @@ const FloorApp = (function () {
         el("div", { class: "value" }, [String(s.value)]),
       ]));
     });
+  }
+
+  // ---------- joined tables ----------
+  // Push two tables together in arrange mode and they become one table: one
+  // unit on the stat strip, one entry in the seating picker, one combined seat
+  // count. Nothing is stored for a join — it is read from where the tables sit,
+  // so dragging them apart un-joins them with no extra bookkeeping.
+
+  // The floor is a 16:10 box. x and w are percentages of its width, y a
+  // percentage of its height, and each shape class fixes a width:height ratio.
+  // To compare distances on both axes they all have to be in the same unit, so
+  // everything below works in percent-of-floor-WIDTH.
+  const FLOOR_ASPECT = 16 / 10;
+  const SHAPE_ASPECT = { round: 1, stool: 1, square: 1, booth: 2, communal: 3 };
+  // How close two edges have to be to count as touching, in the same units:
+  // roughly a finger's width of slack at a normal floor size.
+  const JOIN_TOLERANCE = 1.0;
+
+  function tableBox(t) {
+    const w = Number(t.w) || 0;
+    const h = w / (SHAPE_ASPECT[t.shape] || 1);
+    const cx = Number(t.x) || 0;
+    const cy = (Number(t.y) || 0) / FLOOR_ASPECT;
+    return { left: cx - w / 2, right: cx + w / 2, top: cy - h / 2, bottom: cy + h / 2 };
+  }
+
+  function boxesTouch(a, b) {
+    return (
+      a.left - JOIN_TOLERANCE < b.right &&
+      b.left - JOIN_TOLERANCE < a.right &&
+      a.top - JOIN_TOLERANCE < b.bottom &&
+      b.top - JOIN_TOLERANCE < a.bottom
+    );
+  }
+
+  function makeGroup(members) {
+    const sorted = members
+      .slice()
+      .sort((a, b) => String(a.label).localeCompare(String(b.label), undefined, { numeric: true }));
+    const boxes = sorted.map(tableBox);
+    return {
+      tables: sorted,
+      ids: sorted.map((t) => t.id),
+      label: sorted.map((t) => t.label).join(" + "),
+      seats: sorted.reduce((s, t) => s + (Number(t.seats) || 0), 0),
+      guests: sorted.reduce((s, t) => s + (Number(t.guests) || 0), 0),
+      // A join is seated if any part of it is, and dirty if any part still
+      // needs bussing — you can't sit a new party at half of it.
+      status: sorted.some((t) => t.status === "seated")
+        ? "seated"
+        : sorted.some((t) => t.status === "dirty")
+        ? "dirty"
+        : "clean",
+      seatedAt: sorted.reduce((earliest, t) => {
+        if (!t.seatedAt) return earliest;
+        return !earliest || t.seatedAt < earliest ? t.seatedAt : earliest;
+      }, null),
+      box: {
+        left: Math.min.apply(null, boxes.map((b) => b.left)),
+        right: Math.max.apply(null, boxes.map((b) => b.right)),
+        top: Math.min.apply(null, boxes.map((b) => b.top)),
+        bottom: Math.max.apply(null, boxes.map((b) => b.bottom)),
+      },
+    };
+  }
+
+  // Every run of touching tables in a layout, as connected components.
+  function groupsFor(layoutId) {
+    const list = state.layouts[layoutId] || [];
+    const boxes = list.map(tableBox);
+    const seen = new Array(list.length).fill(false);
+    const groups = [];
+    for (let i = 0; i < list.length; i++) {
+      if (seen[i]) continue;
+      seen[i] = true;
+      const stack = [i];
+      const members = [];
+      while (stack.length) {
+        const k = stack.pop();
+        members.push(list[k]);
+        for (let j = 0; j < list.length; j++) {
+          if (!seen[j] && boxesTouch(boxes[k], boxes[j])) {
+            seen[j] = true;
+            stack.push(j);
+          }
+        }
+      }
+      if (members.length > 1) groups.push(makeGroup(members));
+    }
+    return groups;
+  }
+
+  function groupOf(tableId, layoutId) {
+    return groupsFor(layoutId || state.activeLayout).find((g) => g.ids.indexOf(tableId) !== -1) || null;
+  }
+
+  // What the floor is actually made of once joins are taken into account: a
+  // joined run counts once, an unjoined table counts once. Stats, the seating
+  // picker and the detail panel all work in units rather than tables.
+  function unitsFor(layoutId) {
+    const groups = groupsFor(layoutId);
+    const claimed = new Set();
+    groups.forEach((g) => g.ids.forEach((id) => claimed.add(id)));
+    const units = groups.map((g) => ({ group: g, tables: g.tables, label: g.label, seats: g.seats, guests: g.guests, status: g.status, seatedAt: g.seatedAt, joined: true }));
+    (state.layouts[layoutId] || []).forEach((t) => {
+      if (claimed.has(t.id)) return;
+      units.push({ group: null, tables: [t], label: t.label, seats: Number(t.seats) || 0, guests: Number(t.guests) || 0, status: t.status, seatedAt: t.seatedAt, joined: false });
+    });
+    return units;
+  }
+
+  function unitFor(table) {
+    const g = groupOf(table.id);
+    if (g) return { group: g, tables: g.tables, label: g.label, seats: g.seats, guests: g.guests, status: g.status, seatedAt: g.seatedAt, joined: true };
+    return { group: null, tables: [table], label: table.label, seats: Number(table.seats) || 0, guests: Number(table.guests) || 0, status: table.status, seatedAt: table.seatedAt, joined: false };
+  }
+
+  // The unit the open table belongs to, recomputed each time so it follows the
+  // tables if they've been dragged together or apart since it was opened.
+  function selectedUnit() {
+    const table = selectedId ? findTable(selectedId) : null;
+    return table ? unitFor(table) : null;
+  }
+
+  // The band drawn around a joined run, behind the tables themselves.
+  function joinBandNode(group) {
+    const pad = 0.9;
+    const left = group.box.left - pad;
+    const width = group.box.right - group.box.left + pad * 2;
+    // Back out of percent-of-width into the percent-of-height the CSS wants.
+    const top = (group.box.top - pad) * FLOOR_ASPECT;
+    const height = (group.box.bottom - group.box.top + pad * 2) * FLOOR_ASPECT;
+    const node = el("div", { class: "join-band st-" + group.status, "aria-hidden": "true" }, [
+      el("span", { class: "join-tag" }, [`${group.label} · ${group.seats} seats`]),
+    ]);
+    node.style.left = left + "%";
+    node.style.top = top + "%";
+    node.style.width = width + "%";
+    node.style.height = height + "%";
+    return node;
   }
 
   // ---------- drag ----------
@@ -185,8 +334,12 @@ const FloorApp = (function () {
       if (!dragging) return;
       dragging = false;
       node.classList.remove("dragging");
-      if (moved && arranging) persist();
-      else if (!moved && !arranging) handleTap(table);
+      if (moved && arranging) {
+        persist();
+        // Where it landed decides what is joined to what, so the bands, the
+        // stat strip and the open panel are all rebuilt from the new positions.
+        renderFloor();
+      } else if (!moved && !arranging) handleTap(table);
     }
 
     node.addEventListener("pointerup", endDrag);
@@ -194,30 +347,44 @@ const FloorApp = (function () {
       if (!dragging) return;
       dragging = false;
       node.classList.remove("dragging");
-      if (moved && arranging) persist();
+      if (moved && arranging) {
+        persist();
+        renderFloor();
+      }
     });
   }
 
   // First tap opens the table; tapping the one that's already open cycles it.
+  // A joined run answers as one: tapping any of its tables opens the run, and
+  // cycling it moves every table in it together.
   function handleTap(table) {
-    if (selectedId !== table.id) {
-      const previous = selectedId ? findTable(selectedId) : null;
+    const unit = unitFor(table);
+    const alreadyOpen = selectedId && unit.tables.some((t) => t.id === selectedId);
+    if (!alreadyOpen) {
+      const previous = selectedUnit();
       selectedId = table.id;
-      if (previous) updateTableNode(previous);
-      updateTableNode(table);
+      if (previous) previous.tables.forEach(updateTableNode);
+      unit.tables.forEach(updateTableNode);
       renderTablePanel();
     } else {
       const order = FloorStorage.STATUSES;
-      setStatus(table, order[(order.indexOf(table.status) + 1) % order.length]);
+      setUnitStatus(unit, order[(order.indexOf(unit.status) + 1) % order.length]);
     }
   }
 
-  function setStatus(table, status) {
-    if (table.status === status) return;
+  // The per-table half of a status change. No rendering, no persistence — the
+  // unit-level callers below own both, so a joined run is one write and one
+  // repaint however many tables it holds.
+  function applyStatus(table, status) {
+    if (table.status === status) return false;
     if (status === "seated") {
       table.seatedAt = Date.now();
       table.lastTurnMs = null;
-      if (!table.guests) table.guests = table.seats;
+      // Deliberately does NOT default the guest count. On a joined run the
+      // party has already been spread across these tables, and a table holding
+      // the overflow legitimately holds zero — filling it to its seat count
+      // here is how a party of 11 used to land as 19 guests. The unit-level
+      // caller owns the default instead.
     } else if (status === "clean") {
       // Turn is over: bank the elapsed time and stop the clock.
       if (table.seatedAt) table.lastTurnMs = Date.now() - table.seatedAt;
@@ -228,10 +395,40 @@ const FloorApp = (function () {
     // Flipping to dirty leaves the clock running — the table isn't turned
     // until it's been bussed and reset, and that wait is worth seeing.
     table.status = status;
+    return true;
+  }
+
+  function setUnitStatus(unit, status) {
+    // Seating straight off the floor, with nobody assigned yet, assumes a full
+    // house — one 4-top seats 4, a joined 4+4 seats 8. Measured before the
+    // status flip, because flipping is what clears a count.
+    const fillToCapacity = status === "seated" && unit.guests <= 0;
+    let changed = false;
+    unit.tables.forEach((t) => {
+      if (applyStatus(t, status)) changed = true;
+    });
+    if (!changed) return;
+    if (fillToCapacity) setUnitGuests(unit, unit.seats);
     persist();
-    updateTableNode(table);
-    renderFloorStats();
-    renderTablePanel();
+    // renderFloor repaints every table, the join bands and the panel — a join
+    // changing status changes all three.
+    renderFloor();
+  }
+
+  function setStatus(table, status) {
+    setUnitStatus(unitFor(table), status);
+  }
+
+  // Seats a whole unit's worth of guests, filling each table to its own seat
+  // count before spilling into the next — so a 6-top and a 4-top pushed
+  // together read as 6 and 2 rather than 5 and 5.
+  function setUnitGuests(unit, total) {
+    let left = Math.max(0, Number(total) || 0);
+    unit.tables.forEach((t, i) => {
+      const capacity = i === unit.tables.length - 1 ? left : Math.min(left, Number(t.seats) || 0);
+      t.guests = capacity;
+      left -= capacity;
+    });
   }
 
   // ---------- table detail panel ----------
@@ -239,6 +436,10 @@ const FloorApp = (function () {
     const panel = $("#table-panel");
     panel.innerHTML = "";
     const table = selectedId ? findTable(selectedId) : null;
+    const unit = table ? unitFor(table) : null;
+    // A joined run keeps its party, its notes and its guest overflow on its
+    // first table, so there is one place to read them from and one to write to.
+    const anchor = unit ? unit.tables[0] : null;
 
     if (!table) {
       panel.appendChild(el("div", { class: "empty-state" }, [
@@ -251,46 +452,48 @@ const FloorApp = (function () {
     }
 
     panel.appendChild(el("div", { class: "tp-head" }, [
-      el("h3", {}, [`Table ${table.label}`]),
-      el("span", { class: "pill st-" + table.status }, [FloorStorage.STATUS_LABELS[table.status]]),
+      el("h3", {}, [unit.joined ? `Tables ${unit.label}` : `Table ${unit.label}`]),
+      el("span", { class: "pill st-" + unit.status }, [FloorStorage.STATUS_LABELS[unit.status]]),
     ]));
     panel.appendChild(el("div", { class: "tp-seats" }, [
-      `Seats ${table.seats} · ${layoutLabel(state.activeLayout)}`,
+      `Seats ${unit.seats} · ${layoutLabel(state.activeLayout)}` +
+        (unit.joined ? ` · ${unit.tables.length} tables pushed together` : ""),
     ]));
 
-    if (table.party) {
-      const party = el("div", { class: "tp-party" }, [el("strong", {}, [table.party.name])]);
-      if (table.party.notes) party.appendChild(el("div", { class: "muted" }, [table.party.notes]));
-      panel.appendChild(party);
+    const party = unit.tables.map((t) => t.party).find(Boolean);
+    if (party) {
+      const partyNode = el("div", { class: "tp-party" }, [el("strong", {}, [party.name])]);
+      if (party.notes) partyNode.appendChild(el("div", { class: "muted" }, [party.notes]));
+      panel.appendChild(partyNode);
     }
 
-    const running = Boolean(table.seatedAt);
+    const running = Boolean(unit.seatedAt);
     panel.appendChild(el("div", { class: "tp-timer" }, [
       el("div", { class: "label" }, [running ? "Seated for" : "Timer stopped"]),
       el("div", { class: "clock" + (running ? " running" : ""), id: "tp-clock" }, [
-        running ? fmtClock(Date.now() - table.seatedAt) : "0:00",
+        running ? fmtClock(Date.now() - unit.seatedAt) : "0:00",
       ]),
     ]));
 
     const statusRow = el("div", { class: "status-row" });
     FloorStorage.STATUSES.forEach((status) => {
-      const on = table.status === status;
+      const on = unit.status === status;
       statusRow.appendChild(el("button", {
         class: "btn btn-sm" + (on ? " on st-" + status : ""),
-        onclick: () => setStatus(table, status),
+        onclick: () => setUnitStatus(unit, status),
       }, [FloorStorage.STATUS_LABELS[status]]));
     });
     panel.appendChild(statusRow);
 
     const guestField = el("div", { class: "field" }, [
       el("label", { for: "tp-guests" }, ["Guest Count"]),
-      el("input", { type: "number", id: "tp-guests", min: "0", step: "1", value: String(table.guests || 0) }),
+      el("input", { type: "number", id: "tp-guests", min: "0", step: "1", value: String(unit.guests || 0) }),
     ]);
     panel.appendChild(guestField);
     $("#tp-guests", guestField).addEventListener("input", (e) => {
-      table.guests = Math.max(0, parseInt(e.target.value, 10) || 0);
+      setUnitGuests(unit, Math.max(0, parseInt(e.target.value, 10) || 0));
       persist();
-      updateTableNode(table);
+      unit.tables.forEach(updateTableNode);
       renderFloorStats();
     });
 
@@ -300,24 +503,31 @@ const FloorApp = (function () {
     ]);
     panel.appendChild(notesField);
     const notes = $("#tp-notes", notesField);
-    notes.value = table.notes || "";
+    notes.value = anchor.notes || "";
     notes.addEventListener("input", (e) => {
-      table.notes = e.target.value;
+      anchor.notes = e.target.value;
       persist();
     });
 
-    if (table.lastTurnMs) {
+    const lastTurn = unit.tables.map((t) => t.lastTurnMs).filter(Boolean).sort((a, b) => b - a)[0];
+    if (lastTurn) {
       panel.appendChild(el("p", { class: "muted", style: "font-size:12.5px;margin:0 0 10px" }, [
-        `Last turn: ${fmtMinutes(table.lastTurnMs)}`,
+        `Last turn: ${fmtMinutes(lastTurn)}`,
+      ]));
+    }
+
+    if (unit.joined) {
+      panel.appendChild(el("p", { class: "muted", style: "font-size:12.5px;margin:0 0 10px" }, [
+        "Joined because these tables are touching. Drag them apart in Arrange Tables to split the run.",
       ]));
     }
 
     panel.appendChild(el("button", {
       class: "btn btn-ghost btn-sm btn-block",
       onclick: () => {
-        const open = table;
+        const open = unit.tables;
         selectedId = null;
-        updateTableNode(open);
+        open.forEach(updateTableNode);
         renderTablePanel();
       },
     }, ["Close"]));
@@ -336,47 +546,49 @@ const FloorApp = (function () {
     renderWaitlist();
   }
 
-  // Every clean table across both layouts, with the ones big enough for the
-  // party first and the smallest of those at the top — the host's usual choice.
-  function seatableTables(partySize) {
+  // Every clean unit across both layouts — joined runs included, at their
+  // combined seat count — with the ones big enough for the party first and the
+  // smallest of those at the top, the host's usual choice. A run only offers
+  // itself if all of it is clean; half a joined run is not a table.
+  function seatableUnits(partySize) {
     const options = [];
     FloorStorage.LAYOUTS.forEach((layout) => {
-      (state.layouts[layout.id] || [])
-        .filter((t) => t.status === "clean")
-        .forEach((table) => options.push({ table, layout }));
+      unitsFor(layout.id)
+        .filter((u) => u.status === "clean")
+        .forEach((unit) => options.push({ unit, layout }));
     });
     return options.sort((a, b) => {
-      const aFits = a.table.seats >= partySize;
-      const bFits = b.table.seats >= partySize;
+      const aFits = a.unit.seats >= partySize;
+      const bFits = b.unit.seats >= partySize;
       if (aFits !== bFits) return aFits ? -1 : 1;
-      // Fitting tables: tightest fit first. Too-small tables: biggest first.
-      return aFits ? a.table.seats - b.table.seats : b.table.seats - a.table.seats;
+      // Fitting units: tightest fit first. Too-small ones: biggest first.
+      return aFits ? a.unit.seats - b.unit.seats : b.unit.seats - a.unit.seats;
     });
   }
 
-  function seatEntryAt(entry, table, layoutId) {
+  function seatEntryAt(entry, unit, layoutId) {
     if (arranging) setArranging(false);
     if (state.activeLayout !== layoutId) {
       state.activeLayout = layoutId;
       $all(".layout-btn").forEach((b) => b.classList.toggle("active", b.dataset.layout === layoutId));
     }
     // Set the count before the status flip so it isn't overwritten by the
-    // seat-count default setStatus applies to a table seated straight off the floor.
-    table.guests = entry.party;
-    table.party = { name: entry.name, notes: entry.notes || "" };
-    selectedId = table.id;
-    setStatus(table, "seated");
+    // seat-count default applied to a table seated straight off the floor.
+    setUnitGuests(unit, entry.party);
+    unit.tables[0].party = { name: entry.name, notes: entry.notes || "" };
+    selectedId = unit.tables[0].id;
+    unit.tables.forEach((t) => applyStatus(t, "seated"));
     state.waitlist = state.waitlist.filter((w) => w.id !== entry.id);
     persist();
     renderFloor();
     renderWaitlist();
     switchTab("floor");
-    toast(`${entry.name} seated at ${table.label}`);
+    toast(`${entry.name} seated at ${unit.joined ? "tables " : ""}${unit.label}`);
   }
 
   function promptSeat(entry) {
     openModal(`Seat ${entry.name} — party of ${entry.party}`, (body, close) => {
-      const options = seatableTables(entry.party);
+      const options = seatableUnits(entry.party);
       if (!options.length) {
         body.appendChild(el("p", { class: "muted" }, ["No clean tables open right now."]));
       } else {
@@ -384,15 +596,17 @@ const FloorApp = (function () {
           "Pick a table — the ones that fit the party are listed first.",
         ]));
         const picker = el("div", { class: "table-picker" });
-        options.forEach(({ table, layout }) => {
-          const fits = table.seats >= entry.party;
+        options.forEach(({ unit, layout }) => {
+          const fits = unit.seats >= entry.party;
           picker.appendChild(el("button", {
             class: "picker-item" + (fits ? "" : " short"),
             type: "button",
-            onclick: () => { seatEntryAt(entry, table, layout.id); close(); },
+            onclick: () => { seatEntryAt(entry, unit, layout.id); close(); },
           }, [
-            el("span", { class: "pi-label" }, [table.label]),
-            el("span", { class: "pi-sub" }, [`${layout.label} · seats ${table.seats}`]),
+            el("span", { class: "pi-label" }, [unit.label]),
+            el("span", { class: "pi-sub" }, [
+              `${layout.label} · seats ${unit.seats}${unit.joined ? " · joined" : ""}`,
+            ]),
           ]));
         });
         body.appendChild(picker);
@@ -701,18 +915,19 @@ const FloorApp = (function () {
   // What the house dashboard needs from the floor, without reaching into this
   // tool's state directly.
   function summary() {
-    const all = FloorStorage.LAYOUTS.flatMap((l) => state.layouts[l.id] || []);
-    const seated = all.filter((t) => t.status === "seated");
-    const dirty = all.filter((t) => t.status === "dirty");
+    // Counted in units so a joined run reads as the one table it has become.
+    const all = FloorStorage.LAYOUTS.flatMap((l) => unitsFor(l.id));
+    const seated = all.filter((u) => u.status === "seated");
     const now = Date.now();
     const waits = state.waitlist.map((w) => now - w.addedAt);
     return {
       tables: all.length,
       seated: seated.length,
-      dirty: dirty.length,
-      clean: all.filter((t) => t.status === "clean").length,
-      guests: seated.reduce((s, t) => s + (Number(t.guests) || 0), 0),
-      seats: all.reduce((s, t) => s + (Number(t.seats) || 0), 0),
+      dirty: all.filter((u) => u.status === "dirty").length,
+      clean: all.filter((u) => u.status === "clean").length,
+      joined: all.filter((u) => u.joined).length,
+      guests: seated.reduce((s, u) => s + u.guests, 0),
+      seats: all.reduce((s, u) => s + u.seats, 0),
       waiting: state.waitlist.length,
       longestWaitMs: waits.length ? Math.max(...waits) : 0,
       quotedParties: state.waitlist.slice(0, 3).map((w) => ({ name: w.name, party: w.party, waitedMs: now - w.addedAt })),
@@ -724,14 +939,20 @@ const FloorApp = (function () {
     const now = Date.now();
     const layouts = FloorStorage.LAYOUTS.map((l) => ({
       layout: l.label,
-      tables: (state.layouts[l.id] || []).map((t) => ({
-        table: t.label,
-        seats: t.seats,
-        status: FloorStorage.STATUS_LABELS[t.status] || t.status,
-        guests: Number(t.guests) || 0,
-        seatedFor: t.seatedAt ? fmtMinutes(now - t.seatedAt) : null,
-        lastTurn: t.lastTurnMs ? fmtMinutes(t.lastTurnMs) : null,
-        notes: t.notes || null,
+      // Units, not raw tables: tables pushed together are reported as the one
+      // table they now are, at their combined seat count.
+      tables: unitsFor(l.id).map((u) => ({
+        table: u.label,
+        joined: u.joined || undefined,
+        joinedFrom: u.joined ? u.tables.length : undefined,
+        seats: u.seats,
+        status: FloorStorage.STATUS_LABELS[u.status] || u.status,
+        guests: u.guests,
+        seatedFor: u.seatedAt ? fmtMinutes(now - u.seatedAt) : null,
+        lastTurn: u.tables.map((t) => t.lastTurnMs).filter(Boolean).sort((a, b) => b - a)[0]
+          ? fmtMinutes(u.tables.map((t) => t.lastTurnMs).filter(Boolean).sort((a, b) => b - a)[0])
+          : null,
+        notes: u.tables.map((t) => t.notes).filter(Boolean).join(" · ") || null,
       })),
     }));
     return {
